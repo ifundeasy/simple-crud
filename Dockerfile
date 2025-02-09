@@ -1,5 +1,6 @@
-# docker build -t simple-crud .
+# docker build -t ifundeasy/simple-crud:latest .
 # docker run --env-file .env.docker -p 8080:3000 simple-crud
+# docker push ifundeasy/simple-crud:latest
 
 
 FROM golang:1.23.4-alpine AS builder
