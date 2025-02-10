@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver/mongo/otelmongo"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -148,7 +150,8 @@ func initTracer() {
 
 func initMongo() {
 	var err error
-	clientOptions := options.Client().ApplyURI(MONGO_URI)
+
+	clientOptions := options.Client().ApplyURI(MONGO_URI).SetMonitor(otelmongo.NewMonitor())
 	MongoClient, err = mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		Logger.Error("MongoDB connection error", slog.String("error", err.Error()))
@@ -171,9 +174,9 @@ type Product struct {
 	Stock int                `json:"stock" bson:"stock"`
 }
 
-func createProduct(w http.ResponseWriter, r *http.Request) {
+func createProduct(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "createProduct")
+	ctx, span := tracer.Start(ctx, "createProduct")
 	defer span.End()
 
 	var product Product
@@ -195,21 +198,22 @@ func createProduct(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(product)
 }
 
-func getProducts(w http.ResponseWriter, r *http.Request) {
+func getProducts(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "getProducts")
+	ctx, span := tracer.Start(ctx, "getProducts")
 	defer span.End()
 
 	collection := MongoClient.Database(MONGO_DB_NAME).Collection("product")
-	cursor, err := collection.Find(context.TODO(), bson.M{})
+	fmt.Println(ctx)
+	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
 		http.Error(w, "Failed to fetch products", http.StatusInternalServerError)
 		return
 	}
-	defer cursor.Close(context.TODO())
+	defer cursor.Close(ctx)
 
 	var products []Product
-	for cursor.Next(context.TODO()) {
+	for cursor.Next(ctx) {
 		var product Product
 		err := cursor.Decode(&product)
 		if err != nil {
@@ -223,9 +227,9 @@ func getProducts(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(products)
 }
 
-func getProductByID(w http.ResponseWriter, r *http.Request) {
+func getProductByID(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "getProductByID")
+	ctx, span := tracer.Start(ctx, "getProductByID")
 	defer span.End()
 
 	id := r.URL.Query().Get("id")
@@ -252,9 +256,9 @@ func getProductByID(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(product)
 }
 
-func updateProduct(w http.ResponseWriter, r *http.Request) {
+func updateProduct(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "updateProduct")
+	ctx, span := tracer.Start(ctx, "updateProduct")
 	defer span.End()
 
 	id := r.URL.Query().Get("id")
@@ -295,9 +299,9 @@ func updateProduct(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(bson.M{"message": "Product updated successfully"})
 }
 
-func deleteProduct(w http.ResponseWriter, r *http.Request) {
+func deleteProduct(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "deleteProduct")
+	ctx, span := tracer.Start(ctx, "deleteProduct")
 	defer span.End()
 
 	id := r.URL.Query().Get("id")
@@ -324,9 +328,9 @@ func deleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 // fetchExternalData: Call an external API
-func fetchExternalData(w http.ResponseWriter, r *http.Request) {
+func fetchExternalData(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer(APP_NAME)
-	_, span := tracer.Start(r.Context(), "fetchExternalData")
+	_, span := tracer.Start(ctx, "fetchExternalData")
 	defer span.End()
 
 	Logger.Info("Fetching data from external API", slog.String("url", EXTERNAL_API))
@@ -340,8 +344,7 @@ func fetchExternalData(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		Logger.Error("External API returned non-200 response",
-			slog.Int("status_code", resp.StatusCode))
+		Logger.Error("External API returned non-200 response", slog.Int("status_code", resp.StatusCode))
 		http.Error(w, "External API error", resp.StatusCode)
 		return
 	}
@@ -364,25 +367,40 @@ func main() {
 	initMongo()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/products", getProducts)
+	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
+		tracer := otel.Tracer(APP_NAME)
+		ctx, span := tracer.Start(r.Context(), "handlerProducts")
+		defer span.End()
+
+		getProducts(ctx, w, r)
+	})
+
 	mux.HandleFunc("/product", func(w http.ResponseWriter, r *http.Request) {
+		tracer := otel.Tracer(APP_NAME)
+		ctx, span := tracer.Start(r.Context(), "handlerProduct")
+		defer span.End()
+
 		switch r.Method {
 		case http.MethodGet:
-			getProductByID(w, r)
+			getProductByID(ctx, w, r)
 		case http.MethodPost:
-			createProduct(w, r)
+			createProduct(ctx, w, r)
 		case http.MethodPut:
-			updateProduct(w, r)
+			updateProduct(ctx, w, r)
 		case http.MethodDelete:
-			deleteProduct(w, r)
+			deleteProduct(ctx, w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 	mux.HandleFunc("/external", func(w http.ResponseWriter, r *http.Request) {
+		tracer := otel.Tracer(APP_NAME)
+		ctx, span := tracer.Start(r.Context(), "handlerExternal")
+		defer span.End()
+
 		switch r.Method {
 		case http.MethodGet:
-			fetchExternalData(w, r)
+			fetchExternalData(ctx, w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
