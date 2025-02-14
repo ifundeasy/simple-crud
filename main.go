@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -204,7 +203,6 @@ func getProducts(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	collection := MongoClient.Database(MONGO_DB_NAME).Collection("product")
-	fmt.Println(ctx)
 	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
 		http.Error(w, "Failed to fetch products", http.StatusInternalServerError)
