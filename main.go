@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -359,13 +360,55 @@ func fetchExternalData(ctx context.Context, w http.ResponseWriter, r *http.Reque
 	w.Write(body)
 }
 
+func logRequest(r *http.Request) []byte {
+	var bodyBytes []byte
+	if r.Body != nil {
+		bodyBytes, _ = io.ReadAll(r.Body)
+		// Restore body supaya handler bisa baca lagi
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	}
+
+	Logger.Info("Incoming request",
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.String("remote_addr", r.RemoteAddr),
+		slog.String("body", string(bodyBytes)),
+	)
+
+	return bodyBytes
+}
+
 func main() {
 	initConfig()
 	initTracer()
 	initMongo()
 
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		tracer := otel.Tracer(APP_NAME)
+		_, span := tracer.Start(r.Context(), "root")
+		defer span.End()
+
+		logRequest(r)
+
+		if r.Method != http.MethodGet {
+			Logger.Warn("Method not allowed",
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+			)
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		resp := map[string]string{"data": "hello-world"}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
 	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
+		logRequest(r)
+
 		tracer := otel.Tracer(APP_NAME)
 		ctx, span := tracer.Start(r.Context(), "handlerProducts")
 		defer span.End()
@@ -374,6 +417,8 @@ func main() {
 	})
 
 	mux.HandleFunc("/product", func(w http.ResponseWriter, r *http.Request) {
+		logRequest(r)
+
 		tracer := otel.Tracer(APP_NAME)
 		ctx, span := tracer.Start(r.Context(), "handlerProduct")
 		defer span.End()
@@ -388,10 +433,17 @@ func main() {
 		case http.MethodDelete:
 			deleteProduct(ctx, w, r)
 		default:
+			Logger.Warn("Method not allowed",
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+			)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+
 	mux.HandleFunc("/external", func(w http.ResponseWriter, r *http.Request) {
+		logRequest(r)
+
 		tracer := otel.Tracer(APP_NAME)
 		ctx, span := tracer.Start(r.Context(), "handlerExternal")
 		defer span.End()
@@ -400,6 +452,10 @@ func main() {
 		case http.MethodGet:
 			fetchExternalData(ctx, w, r)
 		default:
+			Logger.Warn("Method not allowed",
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+			)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
