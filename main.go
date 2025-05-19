@@ -7,8 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"time"
+
+	"github.com/grafana/pyroscope-go"
+	pyroscope_pprof "github.com/grafana/pyroscope-go/http/pprof"
 
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
@@ -34,6 +38,7 @@ var (
 	MONGO_DB_NAME string
 	EXTERNAL_API  string
 	OTEL_RPC_URI  string
+	PYROSCOPE_URI string
 
 	// Non .env variables
 	MongoClient    *mongo.Client
@@ -83,6 +88,14 @@ func initConfig() {
 		os.Exit(1)
 	}
 
+	PYROSCOPE_URI = os.Getenv("PYROSCOPE_URI")
+	if PYROSCOPE_URI == "" {
+		Logger.Error("Missing required environment variables",
+			slog.String("PYROSCOPE_URI", PYROSCOPE_URI),
+		)
+		os.Exit(1)
+	}
+
 	OTEL_RPC_URI = os.Getenv("OTEL_RPC_URI")
 	if OTEL_RPC_URI == "" {
 		Logger.Error("Missing required environment variables",
@@ -102,6 +115,7 @@ func initConfig() {
 	Logger.Info("Configuration loaded successfully",
 		slog.String("APP_PORT", APP_PORT),
 		slog.String("APP_NAME", APP_NAME),
+		slog.String("PYROSCOPE_URI", PYROSCOPE_URI),
 		slog.String("MONGO_URI", MONGO_URI),
 		slog.String("MONGO_DB_NAME", MONGO_DB_NAME),
 		slog.String("OTEL_RPC_URI", OTEL_RPC_URI),
@@ -383,6 +397,18 @@ func main() {
 	initTracer()
 	initMongo()
 
+	// Starting pyroscope profiler
+	_, pyroErr := pyroscope.Start(pyroscope.Config{
+		ApplicationName: APP_NAME,
+		ServerAddress:   PYROSCOPE_URI,
+		Logger:          pyroscope.StandardLogger,
+	})
+	if pyroErr != nil {
+		Logger.Error("Pyroscope failed to start", slog.String("error", pyroErr.Error()))
+	} else {
+		Logger.Info("Pyroscope started successfully")
+	}
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -459,6 +485,15 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+
+	// Standard pprof routes (copied from /net/http/pprof)
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	// This route is special: note that we're using Pyroscope handler here
+	mux.HandleFunc("/debug/pprof/profile", pyroscope_pprof.Profile)
 
 	server := &http.Server{
 		Addr:         ":" + APP_PORT,
