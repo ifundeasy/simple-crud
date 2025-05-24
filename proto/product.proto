@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package product;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "simple-crud/internal/handler/grpc/pb;pb";
+
+message Product {
+  string id = 1;
+  string name = 2;
+  double price = 3;
+  int32 stock = 4;
+}
+
+message ProductId {
+  string id = 1;
+}
+
+message ProductList {
+  repeated Product products = 1;
+}
+
+service ProductService {
+  rpc GetAll(google.protobuf.Empty) returns (ProductList);
+  rpc GetByID(ProductId) returns (Product);
+  rpc Create(Product) returns (Product);
+  rpc Update(Product) returns (Product);
+  rpc Delete(ProductId) returns (google.protobuf.Empty);
+}
