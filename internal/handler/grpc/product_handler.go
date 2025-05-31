@@ -7,6 +7,7 @@ import (
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/model"
 	"simple-crud/internal/service"
+	"simple-crud/internal/utils"
 	"simple-crud/pkg/logger"
 
 	"log/slog"
@@ -35,7 +36,7 @@ func (h *ProductGRPCHandler) log(ctx context.Context, method string, payload any
 	)
 }
 
-func (h *ProductGRPCHandler) GetAll(ctx context.Context, _ *emptypb.Empty) (*pb.ProductList, error) {
+func (h *ProductGRPCHandler) GetAll(ctx context.Context, _ *emptypb.Empty) (*pb.ProductResN, error) {
 	h.log(ctx, "GetAll", nil)
 
 	products, err := h.Service.GetAll(ctx)
@@ -53,10 +54,13 @@ func (h *ProductGRPCHandler) GetAll(ctx context.Context, _ *emptypb.Empty) (*pb.
 		})
 	}
 
-	return &pb.ProductList{Products: protoProducts}, nil
+	return &pb.ProductResN{
+		Resolver: utils.GetName(),
+		Products: protoProducts,
+	}, nil
 }
 
-func (h *ProductGRPCHandler) GetByID(ctx context.Context, req *pb.ProductId) (*pb.Product, error) {
+func (h *ProductGRPCHandler) GetByID(ctx context.Context, req *pb.ProductId) (*pb.ProductRes1, error) {
 	h.log(ctx, "GetByID", req)
 
 	product, err := h.Service.GetByID(ctx, req.GetId())
@@ -64,15 +68,18 @@ func (h *ProductGRPCHandler) GetByID(ctx context.Context, req *pb.ProductId) (*p
 		return nil, err
 	}
 
-	return &pb.Product{
-		Id:    product.ID.Hex(),
-		Name:  product.Name,
-		Price: product.Price,
-		Stock: int32(product.Stock),
+	return &pb.ProductRes1{
+		Resolver: utils.GetName(),
+		Product: &pb.Product{
+			Id:    product.ID.Hex(),
+			Name:  product.Name,
+			Price: product.Price,
+			Stock: int32(product.Stock),
+		},
 	}, nil
 }
 
-func (h *ProductGRPCHandler) Create(ctx context.Context, req *pb.Product) (*pb.Product, error) {
+func (h *ProductGRPCHandler) Create(ctx context.Context, req *pb.Product) (*pb.ProductRes1, error) {
 	h.log(ctx, "Create", req)
 
 	product := &model.Product{
@@ -86,15 +93,18 @@ func (h *ProductGRPCHandler) Create(ctx context.Context, req *pb.Product) (*pb.P
 		return nil, err
 	}
 
-	return &pb.Product{
-		Id:    created.ID.Hex(),
-		Name:  created.Name,
-		Price: created.Price,
-		Stock: int32(created.Stock),
+	return &pb.ProductRes1{
+		Resolver: utils.GetName(),
+		Product: &pb.Product{
+			Id:    created.ID.Hex(),
+			Name:  created.Name,
+			Price: created.Price,
+			Stock: int32(created.Stock),
+		},
 	}, nil
 }
 
-func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.Product, error) {
+func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.ProductRes1, error) {
 	h.log(ctx, "Update", req)
 
 	if req.GetId() == "" {
@@ -112,7 +122,10 @@ func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.P
 		return nil, err
 	}
 
-	return req, nil
+	return &pb.ProductRes1{
+		Resolver: utils.GetName(),
+		Product:  req,
+	}, nil
 }
 
 func (h *ProductGRPCHandler) Delete(ctx context.Context, req *pb.ProductId) (*emptypb.Empty, error) {

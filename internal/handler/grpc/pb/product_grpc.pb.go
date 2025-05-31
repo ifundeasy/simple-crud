@@ -31,10 +31,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProductServiceClient interface {
-	GetAll(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProductList, error)
-	GetByID(ctx context.Context, in *ProductId, opts ...grpc.CallOption) (*Product, error)
-	Create(ctx context.Context, in *Product, opts ...grpc.CallOption) (*Product, error)
-	Update(ctx context.Context, in *Product, opts ...grpc.CallOption) (*Product, error)
+	GetAll(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProductResN, error)
+	GetByID(ctx context.Context, in *ProductId, opts ...grpc.CallOption) (*ProductRes1, error)
+	Create(ctx context.Context, in *Product, opts ...grpc.CallOption) (*ProductRes1, error)
+	Update(ctx context.Context, in *Product, opts ...grpc.CallOption) (*ProductRes1, error)
 	Delete(ctx context.Context, in *ProductId, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
@@ -46,9 +46,9 @@ func NewProductServiceClient(cc grpc.ClientConnInterface) ProductServiceClient {
 	return &productServiceClient{cc}
 }
 
-func (c *productServiceClient) GetAll(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProductList, error) {
+func (c *productServiceClient) GetAll(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProductResN, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ProductList)
+	out := new(ProductResN)
 	err := c.cc.Invoke(ctx, ProductService_GetAll_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -56,9 +56,9 @@ func (c *productServiceClient) GetAll(ctx context.Context, in *emptypb.Empty, op
 	return out, nil
 }
 
-func (c *productServiceClient) GetByID(ctx context.Context, in *ProductId, opts ...grpc.CallOption) (*Product, error) {
+func (c *productServiceClient) GetByID(ctx context.Context, in *ProductId, opts ...grpc.CallOption) (*ProductRes1, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Product)
+	out := new(ProductRes1)
 	err := c.cc.Invoke(ctx, ProductService_GetByID_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -66,9 +66,9 @@ func (c *productServiceClient) GetByID(ctx context.Context, in *ProductId, opts 
 	return out, nil
 }
 
-func (c *productServiceClient) Create(ctx context.Context, in *Product, opts ...grpc.CallOption) (*Product, error) {
+func (c *productServiceClient) Create(ctx context.Context, in *Product, opts ...grpc.CallOption) (*ProductRes1, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Product)
+	out := new(ProductRes1)
 	err := c.cc.Invoke(ctx, ProductService_Create_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -76,9 +76,9 @@ func (c *productServiceClient) Create(ctx context.Context, in *Product, opts ...
 	return out, nil
 }
 
-func (c *productServiceClient) Update(ctx context.Context, in *Product, opts ...grpc.CallOption) (*Product, error) {
+func (c *productServiceClient) Update(ctx context.Context, in *Product, opts ...grpc.CallOption) (*ProductRes1, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Product)
+	out := new(ProductRes1)
 	err := c.cc.Invoke(ctx, ProductService_Update_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -100,10 +100,10 @@ func (c *productServiceClient) Delete(ctx context.Context, in *ProductId, opts .
 // All implementations must embed UnimplementedProductServiceServer
 // for forward compatibility.
 type ProductServiceServer interface {
-	GetAll(context.Context, *emptypb.Empty) (*ProductList, error)
-	GetByID(context.Context, *ProductId) (*Product, error)
-	Create(context.Context, *Product) (*Product, error)
-	Update(context.Context, *Product) (*Product, error)
+	GetAll(context.Context, *emptypb.Empty) (*ProductResN, error)
+	GetByID(context.Context, *ProductId) (*ProductRes1, error)
+	Create(context.Context, *Product) (*ProductRes1, error)
+	Update(context.Context, *Product) (*ProductRes1, error)
 	Delete(context.Context, *ProductId) (*emptypb.Empty, error)
 	mustEmbedUnimplementedProductServiceServer()
 }
@@ -115,16 +115,16 @@ type ProductServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedProductServiceServer struct{}
 
-func (UnimplementedProductServiceServer) GetAll(context.Context, *emptypb.Empty) (*ProductList, error) {
+func (UnimplementedProductServiceServer) GetAll(context.Context, *emptypb.Empty) (*ProductResN, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAll not implemented")
 }
-func (UnimplementedProductServiceServer) GetByID(context.Context, *ProductId) (*Product, error) {
+func (UnimplementedProductServiceServer) GetByID(context.Context, *ProductId) (*ProductRes1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetByID not implemented")
 }
-func (UnimplementedProductServiceServer) Create(context.Context, *Product) (*Product, error) {
+func (UnimplementedProductServiceServer) Create(context.Context, *Product) (*ProductRes1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Create not implemented")
 }
-func (UnimplementedProductServiceServer) Update(context.Context, *Product) (*Product, error) {
+func (UnimplementedProductServiceServer) Update(context.Context, *Product) (*ProductRes1, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
 }
 func (UnimplementedProductServiceServer) Delete(context.Context, *ProductId) (*emptypb.Empty, error) {

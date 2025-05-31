@@ -17,14 +17,20 @@ message ProductId {
   string id = 1;
 }
 
-message ProductList {
-  repeated Product products = 1;
+message ProductRes1 {
+  string resolver = 1;
+  Product product = 2;
+}
+
+message ProductResN {
+  string resolver = 1;
+  repeated Product products = 2;
 }
 
 service ProductService {
-  rpc GetAll(google.protobuf.Empty) returns (ProductList);
-  rpc GetByID(ProductId) returns (Product);
-  rpc Create(Product) returns (Product);
-  rpc Update(Product) returns (Product);
+  rpc GetAll(google.protobuf.Empty) returns (ProductResN);
+  rpc GetByID(ProductId) returns (ProductRes1);
+  rpc Create(Product) returns (ProductRes1);
+  rpc Update(Product) returns (ProductRes1);
   rpc Delete(ProductId) returns (google.protobuf.Empty);
 }

@@ -18,7 +18,7 @@ import (
 func main() {
 	log := logger.New()
 	cfg := config.Load(log)
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		cfg.ExternalGRPC,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
@@ -44,7 +44,7 @@ func main() {
 		if err != nil {
 			log.Error("Error calling GetAll: %v", err)
 		} else {
-			log.Info("Received products",
+			log.Info("Received products from: "+resp.Resolver,
 				slog.Int("count", len(resp.GetProducts())),
 			)
 		}

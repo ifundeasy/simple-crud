@@ -9,19 +9,20 @@ import (
 )
 
 type Config struct {
-	AppPort          string
-	AppName          string
-	AppClientDelayMs int64
-	MongoURI         string
-	MongoDBName      string
-	ExternalGRPC     string
-	ExternalHTTP     string
-	OtelRPCURI       string
-	PyroscopeURI     string
+	AppPort            string
+	AppName            string
+	AppClientDelayMs   int64
+	DnsResolverDelayMs int64
+	MongoURI           string
+	MongoDBName        string
+	ExternalGRPC       string
+	ExternalHTTP       string
+	OtelRPCURI         string
+	PyroscopeURI       string
 }
 
-func getClientDelay(logger *slog.Logger) int64 {
-	val := os.Getenv("APP_CLIENT_DELAY_MS")
+func getClientDelay(varName string, logger *slog.Logger) int64 {
+	val := os.Getenv(varName)
 	if val == "" {
 		logger.Warn("Unset APP_CLIENT_DELAY_MS; fallback to 1s")
 		return 1000 // default value if not set
@@ -43,15 +44,16 @@ func Load(logger *slog.Logger) *Config {
 	}
 
 	cfg := &Config{
-		AppPort:          os.Getenv("APP_PORT"),
-		AppName:          os.Getenv("APP_NAME"),
-		AppClientDelayMs: getClientDelay(logger),
-		MongoURI:         os.Getenv("MONGO_URI"),
-		MongoDBName:      os.Getenv("MONGO_DB_NAME"),
-		ExternalGRPC:     os.Getenv("EXTERNAL_GRPC"),
-		ExternalHTTP:     os.Getenv("EXTERNAL_HTTP"),
-		OtelRPCURI:       os.Getenv("OTEL_RPC_URI"),
-		PyroscopeURI:     os.Getenv("PYROSCOPE_URI"),
+		AppPort:            os.Getenv("APP_PORT"),
+		AppName:            os.Getenv("APP_NAME"),
+		AppClientDelayMs:   getClientDelay("APP_CLIENT_DELAY_MS", logger),
+		DnsResolverDelayMs: getClientDelay("DNS_RESOLVER_DELAY_MS", logger),
+		MongoURI:           os.Getenv("MONGO_URI"),
+		MongoDBName:        os.Getenv("MONGO_DB_NAME"),
+		ExternalGRPC:       os.Getenv("EXTERNAL_GRPC"),
+		ExternalHTTP:       os.Getenv("EXTERNAL_HTTP"),
+		OtelRPCURI:         os.Getenv("OTEL_RPC_URI"),
+		PyroscopeURI:       os.Getenv("PYROSCOPE_URI"),
 	}
 
 	// Validate required env
