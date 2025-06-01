@@ -34,7 +34,7 @@ func (h *ExternalHandler) logging(span trace.Span, function string, r *http.Requ
 		body, _ = io.ReadAll(r.Body)
 		r.Body = io.NopCloser(io.NopCloser(io.MultiReader(bytes.NewBuffer(body))))
 	}
-	log.Info("HTTP Request",
+	log.Info("HTTP External",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
 		slog.String("function", function),

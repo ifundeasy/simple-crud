@@ -30,7 +30,7 @@ func NewProductGRPCHandler(svc *service.ProductService) *ProductGRPCHandler {
 
 func (h *ProductGRPCHandler) logRequest(span trace.Span, function string, method string, payload any) {
 	log := logger.Instance()
-	log.Info("gRPC Request",
+	log.Info("gRPC",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
 		slog.String("function", function),

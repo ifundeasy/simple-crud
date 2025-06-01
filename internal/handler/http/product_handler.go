@@ -35,7 +35,7 @@ func (h *ProductHandler) logging(span trace.Span, function string, r *http.Reque
 		r.Body = io.NopCloser(io.NopCloser(io.MultiReader(bytes.NewBuffer(body))))
 	}
 	log := logger.Instance()
-	log.Info("HTTP Request",
+	log.Info("HTTP",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
 		slog.String("function", function),
@@ -56,7 +56,7 @@ func (h *ProductHandler) GetAll(ctx context.Context, w http.ResponseWriter, r *h
 
 	h.logging(span, "getProductsHandler", r)
 
-	products, err := h.service.GetAll(r.Context())
+	products, err := h.service.GetAll(ctx)
 	if err != nil {
 		http.Error(w, "Failed to fetch products", http.StatusInternalServerError)
 		return
@@ -77,7 +77,7 @@ func (h *ProductHandler) GetByID(ctx context.Context, w http.ResponseWriter, r *
 		http.Error(w, "ID is required", http.StatusBadRequest)
 		return
 	}
-	product, err := h.service.GetByID(r.Context(), id)
+	product, err := h.service.GetByID(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -99,7 +99,7 @@ func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), &product)
+	created, err := h.service.Create(ctx, &product)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -128,7 +128,7 @@ func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.service.Update(r.Context(), id, &p); err != nil {
+	if err := h.service.Update(ctx, id, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -149,7 +149,7 @@ func (h *ProductHandler) Delete(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(ctx, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

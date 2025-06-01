@@ -29,7 +29,7 @@ func NewProductRepository(db *mongo.Database) *ProductRepository {
 
 func (s *ProductRepository) logging(span trace.Span, function string, method string, filter string, payload *model.Product) {
 	log := logger.Instance()
-	log.Info("Service Level",
+	log.Info("Repository",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
 		slog.String("function", function),

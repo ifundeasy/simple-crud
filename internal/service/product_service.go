@@ -27,7 +27,7 @@ func NewProductService(repo *repository.ProductRepository) *ProductService {
 
 func (s *ProductService) logging(span trace.Span, function string, filter string, payload *model.Product) {
 	log := logger.Instance()
-	log.Info("Service Level",
+	log.Info("Service",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
 		slog.String("function", function),
