@@ -2,12 +2,21 @@ package utils
 
 import (
 	"os"
+	"sync"
 )
 
-func GetName() string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		hostname = "unknown-host"
-	}
-	return hostname
+var hostInstance string
+var hostOnce sync.Once
+
+func GetHost() string {
+	hostOnce.Do(func() {
+		h, err := os.Hostname()
+		if err != nil {
+			hostInstance = "unknown"
+		} else {
+			hostInstance = h
+		}
+	})
+
+	return hostInstance
 }

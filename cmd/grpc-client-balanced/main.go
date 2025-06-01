@@ -15,7 +15,7 @@ import (
 
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
-	"simple-crud/pkg/logger"
+	"simple-crud/internal/logger"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -23,8 +23,8 @@ import (
 var (
 	conn   *grpc.ClientConn
 	client pb.ProductServiceClient
-	log    *slog.Logger
-	cfg    *config.Config
+	log    = logger.Instance()
+	cfg    = config.Instance()
 )
 
 // hashAddresses generates a SHA256 hash from list of resolved pod IP addresses.
@@ -149,9 +149,6 @@ func grpcWorker(notify chan struct{}) {
 }
 
 func main() {
-	log = logger.New()
-	cfg = config.Load(log)
-
 	notify := make(chan struct{}, 1)
 
 	// Start DNS watcher goroutine

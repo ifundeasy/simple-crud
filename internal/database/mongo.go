@@ -3,6 +3,9 @@ package database
 import (
 	"context"
 	"log/slog"
+	"simple-crud/internal/config"
+	"simple-crud/internal/logger"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -15,29 +18,54 @@ type Mongo struct {
 	Database *mongo.Database
 }
 
-func Connect(ctx context.Context, logger *slog.Logger, uri, dbName string) (*Mongo, error) {
-	opts := options.Client().
-		ApplyURI(uri).
-		SetMonitor(otelmongo.NewMonitor())
+var (
+	instance *Mongo
+	once     sync.Once
+)
 
-	client, err := mongo.Connect(ctx, opts)
-	if err != nil {
-		logger.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
-		return nil, err
-	}
+func Instance(ctx context.Context, uri, dbName string) (*Mongo, error) {
+	var err error
 
-	// Ping with timeout context
-	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err := client.Ping(pingCtx, nil); err != nil {
-		logger.Error("MongoDB ping failed", slog.String("error", err.Error()))
-		return nil, err
-	}
+	once.Do(func() {
+		var cfg = config.Instance()
 
-	logger.Info("Connected to MongoDB successfully")
+		_uri := uri
+		if _uri == "" {
+			_uri = cfg.MongoURI
+		}
 
-	return &Mongo{
-		Client:   client,
-		Database: client.Database(dbName),
-	}, nil
+		opts := options.Client().
+			ApplyURI(_uri).
+			SetMonitor(otelmongo.NewMonitor())
+
+		var log = logger.Instance()
+		client, connErr := mongo.Connect(ctx, opts)
+		if connErr != nil {
+			log.Error("Failed to connect to MongoDB", slog.String("error", connErr.Error()))
+			err = connErr
+			return
+		}
+
+		// Ping with timeout context
+		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if pingErr := client.Ping(pingCtx, nil); pingErr != nil {
+			log.Error("MongoDB ping failed", slog.String("error", pingErr.Error()))
+			err = pingErr
+			return
+		}
+
+		log.Info("Connected to MongoDB successfully")
+
+		_dbName := dbName
+		if _dbName == "" {
+			_dbName = cfg.MongoDBName
+		}
+		instance = &Mongo{
+			Client:   client,
+			Database: client.Database(_dbName),
+		}
+	})
+
+	return instance, err
 }

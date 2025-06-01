@@ -3,7 +3,9 @@ package config
 import (
 	"log/slog"
 	"os"
+	"simple-crud/internal/logger"
 	"strconv"
+	"sync"
 
 	"github.com/joho/godotenv"
 )
@@ -21,85 +23,84 @@ type Config struct {
 	PyroscopeURI       string
 }
 
-func getClientDelay(varName string, logger *slog.Logger) int64 {
+var log = logger.Instance()
+var (
+	configInstance *Config
+	configOnce     sync.Once
+)
+
+func setInt64(varName string) int64 {
+
 	val := os.Getenv(varName)
 	if val == "" {
-		logger.Warn("Unset APP_CLIENT_DELAY_MS; fallback to 1s")
+		log.Warn("Unset %s; fallback to 1s", varName)
 		return 1000 // default value if not set
 	}
 
 	num, err := strconv.ParseInt(val, 10, 16)
 	if err != nil {
-		logger.Error("Invalid APP_CLIENT_DELAY_MS: %v; fallback to 1s", err)
+		log.Error("Invalid %s: %v; fallback to 1s", varName, err)
 		return 1000
 	}
 
 	return int64(num)
 }
 
-func Load(logger *slog.Logger) *Config {
-	// Load .env file (optional)
-	if err := godotenv.Load(); err != nil {
-		logger.Warn("No .env file found, using system environment variables")
-	}
+func Instance() *Config {
+	configOnce.Do(func() {
 
-	cfg := &Config{
-		AppPort:            os.Getenv("APP_PORT"),
-		AppName:            os.Getenv("APP_NAME"),
-		AppClientDelayMs:   getClientDelay("APP_CLIENT_DELAY_MS", logger),
-		DnsResolverDelayMs: getClientDelay("DNS_RESOLVER_DELAY_MS", logger),
-		MongoURI:           os.Getenv("MONGO_URI"),
-		MongoDBName:        os.Getenv("MONGO_DB_NAME"),
-		ExternalGRPC:       os.Getenv("EXTERNAL_GRPC"),
-		ExternalHTTP:       os.Getenv("EXTERNAL_HTTP"),
-		OtelRPCURI:         os.Getenv("OTEL_RPC_URI"),
-		PyroscopeURI:       os.Getenv("PYROSCOPE_URI"),
-	}
+		// Load .env file (optional)
+		if err := godotenv.Load(); err != nil {
+			log.Warn("No .env file found, using system environment variables")
+		}
 
-	// Validate required env
-	var missing []string
-	if cfg.AppPort == "" {
-		missing = append(missing, "APP_PORT")
-	}
-	if cfg.AppName == "" {
-		missing = append(missing, "APP_NAME")
-	}
-	if cfg.MongoURI == "" {
-		missing = append(missing, "MONGO_URI")
-	}
-	if cfg.MongoDBName == "" {
-		missing = append(missing, "MONGO_DB_NAME")
-	}
-	if cfg.ExternalHTTP == "" {
-		missing = append(missing, "EXTERNAL_GRPC")
-	}
-	if cfg.ExternalHTTP == "" {
-		missing = append(missing, "EXTERNAL_API")
-	}
-	if cfg.OtelRPCURI == "" {
-		missing = append(missing, "OTEL_RPC_URI")
-	}
-	if cfg.PyroscopeURI == "" {
-		missing = append(missing, "PYROSCOPE_URI")
-	}
+		configInstance = &Config{
+			AppPort:            os.Getenv("APP_PORT"),
+			AppName:            os.Getenv("APP_NAME"),
+			AppClientDelayMs:   setInt64("APP_CLIENT_DELAY_MS"),
+			DnsResolverDelayMs: setInt64("DNS_RESOLVER_DELAY_MS"),
+			MongoURI:           os.Getenv("MONGO_URI"),
+			MongoDBName:        os.Getenv("MONGO_DB_NAME"),
+			ExternalGRPC:       os.Getenv("EXTERNAL_GRPC"),
+			ExternalHTTP:       os.Getenv("EXTERNAL_HTTP"),
+			OtelRPCURI:         os.Getenv("OTEL_RPC_URI"),
+			PyroscopeURI:       os.Getenv("PYROSCOPE_URI"),
+		}
 
-	if len(missing) > 0 {
-		logger.Error("Missing required environment variables", slog.Any("missing", missing))
-		os.Exit(1)
-	}
+		// Validate required env
+		var missing []string
+		if configInstance.AppPort == "" {
+			missing = append(missing, "APP_PORT")
+		}
+		if configInstance.AppName == "" {
+			missing = append(missing, "APP_NAME")
+		}
+		if configInstance.MongoURI == "" {
+			missing = append(missing, "MONGO_URI")
+		}
+		if configInstance.MongoDBName == "" {
+			missing = append(missing, "MONGO_DB_NAME")
+		}
+		if configInstance.ExternalGRPC == "" {
+			missing = append(missing, "EXTERNAL_GRPC")
+		}
+		if configInstance.ExternalHTTP == "" {
+			missing = append(missing, "EXTERNAL_HTTP")
+		}
+		if configInstance.OtelRPCURI == "" {
+			missing = append(missing, "OTEL_RPC_URI")
+		}
+		if configInstance.PyroscopeURI == "" {
+			missing = append(missing, "PYROSCOPE_URI")
+		}
 
-	logger.Info("Configuration loaded successfully", slog.Any("config", cfg))
-	return cfg
-}
+		if len(missing) > 0 {
+			log.Error("Missing required environment variables", slog.Any("missing", missing))
+			os.Exit(1)
+		}
 
-func (c *Config) GetAppName() string {
-	return c.AppName
-}
+		log.Info("Configuration loaded successfully", slog.Any("config", configInstance))
+	})
 
-func (c *Config) GetOtelRPCURI() string {
-	return c.OtelRPCURI
-}
-
-func (c *Config) GetPyroscopeURI() string {
-	return c.PyroscopeURI
+	return configInstance
 }

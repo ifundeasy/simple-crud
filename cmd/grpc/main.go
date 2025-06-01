@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 
@@ -13,34 +12,32 @@ import (
 	"simple-crud/internal/database"
 	grpcHandler "simple-crud/internal/handler/grpc"
 	pb "simple-crud/internal/handler/grpc/pb"
+	"simple-crud/internal/logger"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
-	"simple-crud/internal/telemetry"
-	"simple-crud/pkg/logger"
+	"simple-crud/internal/tracer"
 )
 
 func main() {
 	ctx := context.Background()
-	logg := logger.New()
-
-	// Load config
-	cfg := config.Load(logg)
+	log := logger.Instance()
+	cfg := config.Instance()
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
-	shutdown := telemetry.Init(ctx, logg, cfg)
+	shutdown, _ := tracer.Instance(ctx)
 	defer shutdown()
 
 	// Connect to MongoDB
-	db, err := database.Connect(ctx, logg, cfg.MongoURI, cfg.MongoDBName)
+	db, err := database.Instance(ctx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
-		logg.Error("Failed to connect to MongoDB", "error", err)
+		log.Error("Failed to connect to MongoDB", "error", err)
 		os.Exit(1)
 	}
 
 	// Wiring
 	productRepo := repository.NewProductRepository(db.Database)
 	productService := service.NewProductService(productRepo)
-	productHandler := grpcHandler.NewProductGRPCHandler(productService, logg)
+	productHandler := grpcHandler.NewProductGRPCHandler(productService)
 
 	// Start gRPC server
 	grpcServer := grpc.NewServer()
@@ -49,12 +46,12 @@ func main() {
 
 	lis, err := net.Listen("tcp", ":"+cfg.AppPort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Error("failed to listen: %v", err)
 	}
 
-	logg.Info("gRPC server running", "port", cfg.AppPort)
+	log.Info("gRPC server running", "port", cfg.AppPort)
 
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Error("failed to serve: %v", err)
 	}
 }

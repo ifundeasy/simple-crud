@@ -10,14 +10,15 @@ import (
 
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
-	"simple-crud/pkg/logger"
+	"simple-crud/internal/logger"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func main() {
-	log := logger.New()
-	cfg := config.Load(log)
+	log := logger.Instance()
+	cfg := config.Instance()
+
 	conn, err := grpc.NewClient(
 		cfg.ExternalGRPC,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
