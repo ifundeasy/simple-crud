@@ -53,12 +53,18 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		log.Info("HTTP Request",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.String("query", r.URL.RawQuery),
-			slog.String("remote", r.RemoteAddr),
+		tracer := otel.Tracer(cfg.AppName)
+		_, span := tracer.Start(r.Context(), "handlerRoot")
+		defer span.End()
+
+		log.Info("HTTP",
+			slog.String("trace_id", span.SpanContext().TraceID().String()),
+			slog.String("span_id", span.SpanContext().SpanID().String()),
 			slog.String("hostname", utils.GetHost()),
+			slog.String("http.method", r.Method),
+			slog.String("http.path", r.URL.Path),
+			slog.String("http.query", r.URL.RawQuery),
+			slog.String("http.remote", r.RemoteAddr),
 		)
 		resp := map[string]string{"data": "hello-world"}
 		w.Header().Set("Content-Type", "application/json")

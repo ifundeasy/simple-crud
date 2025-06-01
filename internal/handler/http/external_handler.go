@@ -37,13 +37,13 @@ func (h *ExternalHandler) logging(span trace.Span, function string, r *http.Requ
 	log.Info("HTTP External",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("function", function),
-		slog.String("method", r.Method),
-		slog.String("path", r.URL.Path),
-		slog.String("query", r.URL.RawQuery),
-		slog.String("remote", r.RemoteAddr),
 		slog.String("hostname", utils.GetHost()),
-		slog.String("body", string(body)),
+		slog.String("function", function),
+		slog.String("http.method", r.Method),
+		slog.String("http.path", r.URL.Path),
+		slog.String("http.query", r.URL.RawQuery),
+		slog.String("http.remote", r.RemoteAddr),
+		slog.String("http.body", string(body)),
 	)
 }
 

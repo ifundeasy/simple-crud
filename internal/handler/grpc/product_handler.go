@@ -33,10 +33,10 @@ func (h *ProductGRPCHandler) logRequest(span trace.Span, function string, method
 	log.Info("gRPC",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("function", function),
-		slog.String("method", method),
 		slog.String("hostname", utils.GetHost()),
-		slog.Any("payload", payload),
+		slog.String("function", function),
+		slog.String("grpc.method", method),
+		slog.Any("grpc.payload", payload),
 	)
 }
 
