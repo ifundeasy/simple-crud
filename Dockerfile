@@ -23,6 +23,9 @@ FROM --platform=$BUILDPLATFORM golang:1.23.4 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_TIME=unknown
 
 ENV CGO_ENABLED=0
 
@@ -33,11 +36,11 @@ RUN go mod tidy && go mod download
 
 COPY . .
 
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o http-app ./cmd/http/main.go
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o grpc-app ./cmd/grpc/main.go
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o http-client-app ./cmd/http-client/main.go
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o grpc-client-app ./cmd/grpc-client/main.go
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o grpc-client-balanced-app ./cmd/grpc-client-balanced/main.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-X 'simple-crud/internal/version.Version=${VERSION}' -X 'simple-crud/internal/version.Commit=${COMMIT}' -X 'simple-crud/internal/version.BuildTime=${BUILD_TIME}'" -o http-app ./cmd/http/main.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-X 'simple-crud/internal/version.Version=${VERSION}' -X 'simple-crud/internal/version.Commit=${COMMIT}' -X 'simple-crud/internal/version.BuildTime=${BUILD_TIME}'" -o grpc-app ./cmd/grpc/main.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-X 'simple-crud/internal/version.Version=${VERSION}' -X 'simple-crud/internal/version.Commit=${COMMIT}' -X 'simple-crud/internal/version.BuildTime=${BUILD_TIME}'" -o http-client-app ./cmd/http-client/main.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-X 'simple-crud/internal/version.Version=${VERSION}' -X 'simple-crud/internal/version.Commit=${COMMIT}' -X 'simple-crud/internal/version.BuildTime=${BUILD_TIME}'" -o grpc-client-app ./cmd/grpc-client/main.go
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags "-X 'simple-crud/internal/version.Version=${VERSION}' -X 'simple-crud/internal/version.Commit=${COMMIT}' -X 'simple-crud/internal/version.BuildTime=${BUILD_TIME}'" -o grpc-client-balanced-app ./cmd/grpc-client-balanced/main.go
 
 ########################
 # Runtime stage (debian)

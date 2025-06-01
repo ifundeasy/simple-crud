@@ -16,6 +16,7 @@ import (
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/logger"
+	"simple-crud/internal/version"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -149,6 +150,12 @@ func grpcWorker(notify chan struct{}) {
 }
 
 func main() {
+	log.Info(cfg.AppName,
+		slog.String("version", version.Version),
+		slog.String("commit", version.Commit),
+		slog.String("buildTime", version.BuildTime),
+	)
+
 	notify := make(chan struct{}, 1)
 
 	// Start DNS watcher goroutine

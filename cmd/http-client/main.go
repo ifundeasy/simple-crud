@@ -12,11 +12,18 @@ import (
 
 	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
+	"simple-crud/internal/version"
 )
 
 func main() {
 	log := logger.Instance()
 	cfg := config.Instance()
+
+	log.Info(cfg.AppName,
+		slog.String("version", version.Version),
+		slog.String("commit", version.Commit),
+		slog.String("buildTime", version.BuildTime),
+	)
 
 	if cfg.ExternalHTTP == "" {
 		log.Error("EXTERNAL_HTTP environment variable is not set")

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 
@@ -16,12 +17,19 @@ import (
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
 	"simple-crud/internal/tracer"
+	"simple-crud/internal/version"
 )
 
 func main() {
 	ctx := context.Background()
 	log := logger.Instance()
 	cfg := config.Instance()
+
+	log.Info(cfg.AppName,
+		slog.String("version", version.Version),
+		slog.String("commit", version.Commit),
+		slog.String("buildTime", version.BuildTime),
+	)
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
 	shutdown, _ := tracer.Instance(ctx)
