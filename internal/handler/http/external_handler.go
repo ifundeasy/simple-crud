@@ -28,7 +28,7 @@ func NewExternalHandler(url string) *ExternalHandler {
 
 var log = logger.Instance()
 
-func (h *ExternalHandler) logRequest(span trace.Span, r *http.Request) {
+func (h *ExternalHandler) logging(span trace.Span, function string, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(r.Body)
@@ -37,6 +37,7 @@ func (h *ExternalHandler) logRequest(span trace.Span, r *http.Request) {
 	log.Info("HTTP Request",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
+		slog.String("function", function),
 		slog.String("method", r.Method),
 		slog.String("path", r.URL.Path),
 		slog.String("query", r.URL.RawQuery),
@@ -48,10 +49,10 @@ func (h *ExternalHandler) logRequest(span trace.Span, r *http.Request) {
 
 func (h *ExternalHandler) Fetch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	tracer := otel.Tracer("external-api")
-	_, span := tracer.Start(r.Context(), "fetchExternalData")
+	_, span := tracer.Start(r.Context(), "fetchExternalHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "fetchExternalHandler", r)
 
 	cfg := config.Instance()
 	resp, err := http.Get(cfg.ExternalHTTP + "/products")

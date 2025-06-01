@@ -2,8 +2,15 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 
+	"simple-crud/internal/config"
+	"simple-crud/internal/logger"
 	"simple-crud/internal/model"
+	"simple-crud/internal/utils"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -20,13 +27,38 @@ func NewProductRepository(db *mongo.Database) *ProductRepository {
 	}
 }
 
+func (s *ProductRepository) logging(span trace.Span, function string, method string, filter string, payload *model.Product) {
+	log := logger.Instance()
+	log.Info("Service Level",
+		slog.String("trace_id", span.SpanContext().TraceID().String()),
+		slog.String("span_id", span.SpanContext().SpanID().String()),
+		slog.String("function", function),
+		slog.String("method", method),
+		slog.String("filter", filter),
+		slog.String("payload", utils.ToJSONString(payload)),
+	)
+}
+
 func (r *ProductRepository) Insert(ctx context.Context, product *model.Product) error {
+	cfg := config.Instance()
+	tracer := otel.Tracer(cfg.AppName)
+	_, span := tracer.Start(ctx, "InsertProductRepository")
+	defer span.End()
+
+	r.logging(span, "InsertProductRepository", "InsertOne", "", product)
 	product.ID = primitive.NewObjectID()
 	_, err := r.collection.InsertOne(ctx, product)
 	return err
 }
 
 func (r *ProductRepository) FindAll(ctx context.Context) ([]model.Product, error) {
+	cfg := config.Instance()
+	tracer := otel.Tracer(cfg.AppName)
+	_, span := tracer.Start(ctx, "getProductsRepository")
+	defer span.End()
+
+	r.logging(span, "getProductsRepository", "Find", "", nil)
+
 	cursor, err := r.collection.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
@@ -45,6 +77,13 @@ func (r *ProductRepository) FindAll(ctx context.Context) ([]model.Product, error
 }
 
 func (r *ProductRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*model.Product, error) {
+	cfg := config.Instance()
+	tracer := otel.Tracer(cfg.AppName)
+	_, span := tracer.Start(ctx, "getProductByIdRepository")
+	defer span.End()
+
+	r.logging(span, "getProductByIdRepository", "FindOne", id.Hex(), nil)
+
 	var product model.Product
 	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&product)
 	if err != nil {
@@ -53,7 +92,14 @@ func (r *ProductRepository) FindByID(ctx context.Context, id primitive.ObjectID)
 	return &product, nil
 }
 
-func (r *ProductRepository) Update(ctx context.Context, id primitive.ObjectID, updated model.Product) error {
+func (r *ProductRepository) Update(ctx context.Context, id primitive.ObjectID, updated *model.Product) error {
+	cfg := config.Instance()
+	tracer := otel.Tracer(cfg.AppName)
+	_, span := tracer.Start(ctx, "updateProductByIdRepository")
+	defer span.End()
+
+	r.logging(span, "updateProductByIdRepository", "UpdateOne", id.Hex(), nil)
+
 	update := bson.M{
 		"$set": bson.M{
 			"name":  updated.Name,
@@ -66,6 +112,13 @@ func (r *ProductRepository) Update(ctx context.Context, id primitive.ObjectID, u
 }
 
 func (r *ProductRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
+	cfg := config.Instance()
+	tracer := otel.Tracer(cfg.AppName)
+	_, span := tracer.Start(ctx, "deleteProductByIdRepository")
+	defer span.End()
+
+	r.logging(span, "deleteProductByIdRepository", "DeleteOne", id.Hex(), nil)
+
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }

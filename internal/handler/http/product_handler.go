@@ -28,7 +28,7 @@ func NewProductHandler(service *service.ProductService) *ProductHandler {
 	}
 }
 
-func (h *ProductHandler) logRequest(span trace.Span, r *http.Request) {
+func (h *ProductHandler) logging(span trace.Span, function string, r *http.Request) {
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(r.Body)
@@ -38,6 +38,7 @@ func (h *ProductHandler) logRequest(span trace.Span, r *http.Request) {
 	log.Info("HTTP Request",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
+		slog.String("function", function),
 		slog.String("method", r.Method),
 		slog.String("path", r.URL.Path),
 		slog.String("query", r.URL.RawQuery),
@@ -50,10 +51,10 @@ func (h *ProductHandler) logRequest(span trace.Span, r *http.Request) {
 func (h *ProductHandler) GetAll(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProducts")
+	_, span := tracer.Start(ctx, "getProductsHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "getProductsHandler", r)
 
 	products, err := h.service.GetAll(r.Context())
 	if err != nil {
@@ -66,10 +67,10 @@ func (h *ProductHandler) GetAll(ctx context.Context, w http.ResponseWriter, r *h
 func (h *ProductHandler) GetByID(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductById")
+	_, span := tracer.Start(ctx, "getProductByIdHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "getProductByIdHandler", r)
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -87,10 +88,10 @@ func (h *ProductHandler) GetByID(ctx context.Context, w http.ResponseWriter, r *
 func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "createProduct")
+	_, span := tracer.Start(ctx, "createProductHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "createProductHandler", r)
 
 	var product model.Product
 	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
@@ -110,10 +111,10 @@ func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *h
 func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "updateProductById")
+	_, span := tracer.Start(ctx, "updateProductByIdHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "updateProductByIdHandler", r)
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -127,7 +128,7 @@ func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.service.Update(r.Context(), id, p); err != nil {
+	if err := h.service.Update(r.Context(), id, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -137,10 +138,10 @@ func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *h
 func (h *ProductHandler) Delete(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "deleteProductById")
+	_, span := tracer.Start(ctx, "deleteProductByIdHandler")
 	defer span.End()
 
-	h.logRequest(span, r)
+	h.logging(span, "deleteProductByIdHandler", r)
 
 	id := r.URL.Query().Get("id")
 	if id == "" {

@@ -28,12 +28,13 @@ func NewProductGRPCHandler(svc *service.ProductService) *ProductGRPCHandler {
 	}
 }
 
-func (h *ProductGRPCHandler) logRequest(span trace.Span, rpcMethod string, payload any) {
+func (h *ProductGRPCHandler) logRequest(span trace.Span, function string, method string, payload any) {
 	log := logger.Instance()
 	log.Info("gRPC Request",
 		slog.String("trace_id", span.SpanContext().TraceID().String()),
 		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("method", rpcMethod),
+		slog.String("function", function),
+		slog.String("method", method),
 		slog.String("hostname", utils.GetHost()),
 		slog.Any("payload", payload),
 	)
@@ -42,10 +43,10 @@ func (h *ProductGRPCHandler) logRequest(span trace.Span, rpcMethod string, paylo
 func (h *ProductGRPCHandler) GetAll(ctx context.Context, _ *emptypb.Empty) (*pb.ProductResN, error) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProducts")
+	_, span := tracer.Start(ctx, "getProductsHandlerRpc")
 	defer span.End()
 
-	h.logRequest(span, "GetAll", nil)
+	h.logRequest(span, "getProductsHandlerRpc", "GetAll", nil)
 
 	products, err := h.Service.GetAll(ctx)
 	if err != nil {
@@ -71,10 +72,10 @@ func (h *ProductGRPCHandler) GetAll(ctx context.Context, _ *emptypb.Empty) (*pb.
 func (h *ProductGRPCHandler) GetByID(ctx context.Context, req *pb.ProductId) (*pb.ProductRes1, error) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductById")
+	_, span := tracer.Start(ctx, "getProductByIdHandlerRpc")
 	defer span.End()
 
-	h.logRequest(span, "GetByID", req)
+	h.logRequest(span, "getProductByIdHandlerRpc", "GetByID", req)
 
 	product, err := h.Service.GetByID(ctx, req.GetId())
 	if err != nil {
@@ -95,10 +96,10 @@ func (h *ProductGRPCHandler) GetByID(ctx context.Context, req *pb.ProductId) (*p
 func (h *ProductGRPCHandler) Create(ctx context.Context, req *pb.Product) (*pb.ProductRes1, error) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "createProduct")
+	_, span := tracer.Start(ctx, "createProductHandlerRpc")
 	defer span.End()
 
-	h.logRequest(span, "Create", req)
+	h.logRequest(span, "createProductHandlerRpc", "Create", req)
 
 	product := &model.Product{
 		Name:  req.GetName(),
@@ -125,10 +126,10 @@ func (h *ProductGRPCHandler) Create(ctx context.Context, req *pb.Product) (*pb.P
 func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.ProductRes1, error) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "updateProductById")
+	_, span := tracer.Start(ctx, "updateProductByIdHandlerRpc")
 	defer span.End()
 
-	h.logRequest(span, "Update", req)
+	h.logRequest(span, "updateProductByIdHandlerRpc", "Update", req)
 
 	if req.GetId() == "" {
 		return nil, errors.New("id is required")
@@ -140,7 +141,7 @@ func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.P
 		Stock: int(req.GetStock()),
 	}
 
-	err := h.Service.Update(ctx, req.GetId(), p)
+	err := h.Service.Update(ctx, req.GetId(), &p)
 	if err != nil {
 		return nil, err
 	}
@@ -154,10 +155,10 @@ func (h *ProductGRPCHandler) Update(ctx context.Context, req *pb.Product) (*pb.P
 func (h *ProductGRPCHandler) Delete(ctx context.Context, req *pb.ProductId) (*emptypb.Empty, error) {
 	cfg := config.Instance()
 	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "deleteProductById")
+	_, span := tracer.Start(ctx, "deleteProductByIdHandlerRpc")
 	defer span.End()
 
-	h.logRequest(span, "Delete", req)
+	h.logRequest(span, "deleteProductByIdHandlerRpc", "Delete", req)
 
 	if err := h.Service.Delete(ctx, req.GetId()); err != nil {
 		return nil, err

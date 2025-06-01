@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"os"
 	"sync"
 )
@@ -19,4 +20,12 @@ func GetHost() string {
 	})
 
 	return hostInstance
+}
+
+func ToJSONString(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "<marshal error>"
+	}
+	return string(b)
 }
