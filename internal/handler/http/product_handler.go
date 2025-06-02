@@ -1,26 +1,22 @@
 package http
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 
-	"log/slog"
-	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
 	"simple-crud/internal/model"
 	"simple-crud/internal/service"
-	"simple-crud/internal/utils"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type ProductHandler struct {
 	service *service.ProductService
 }
+
+var HttpProductHandlerTracer = otel.Tracer("HttpProductHandler")
 
 func NewProductHandler(service *service.ProductService) *ProductHandler {
 	return &ProductHandler{
@@ -28,35 +24,12 @@ func NewProductHandler(service *service.ProductService) *ProductHandler {
 	}
 }
 
-func (h *ProductHandler) logging(span trace.Span, function string, r *http.Request) {
-	var body []byte
-	if r.Body != nil {
-		body, _ = io.ReadAll(r.Body)
-		r.Body = io.NopCloser(io.NopCloser(io.MultiReader(bytes.NewBuffer(body))))
-	}
-	log := logger.Instance()
-	log.Info("HTTP",
-		slog.String("trace_id", span.SpanContext().TraceID().String()),
-		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("hostname", utils.GetHost()),
-		slog.String("function", function),
-		slog.String("http.method", r.Method),
-		slog.String("http.path", r.URL.Path),
-		slog.String("http.query", r.URL.RawQuery),
-		slog.String("http.remote", r.RemoteAddr),
-		slog.String("http.body", string(body)),
-	)
-}
-
-func (h *ProductHandler) GetAll(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductsHandler")
+func (h *ProductHandler) GetAll(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetAll")
 	defer span.End()
+	logger.Info(ctx, "HttpProductHandler")
 
-	h.logging(span, "getProductsHandler", r)
-
-	products, err := h.service.GetAll(ctx)
+	products, err := h.service.GetAll(r.Context())
 	if err != nil {
 		http.Error(w, "Failed to fetch products", http.StatusInternalServerError)
 		return
@@ -64,20 +37,17 @@ func (h *ProductHandler) GetAll(ctx context.Context, w http.ResponseWriter, r *h
 	_ = json.NewEncoder(w).Encode(products)
 }
 
-func (h *ProductHandler) GetByID(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductByIdHandler")
+func (h *ProductHandler) GetByID(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetByID")
 	defer span.End()
-
-	h.logging(span, "getProductByIdHandler", r)
+	logger.Info(ctx, "HttpProductHandler")
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
 		http.Error(w, "ID is required", http.StatusBadRequest)
 		return
 	}
-	product, err := h.service.GetByID(ctx, id)
+	product, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -85,13 +55,10 @@ func (h *ProductHandler) GetByID(ctx context.Context, w http.ResponseWriter, r *
 	_ = json.NewEncoder(w).Encode(product)
 }
 
-func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "createProductHandler")
+func (h *ProductHandler) Create(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Create")
 	defer span.End()
-
-	h.logging(span, "createProductHandler", r)
+	logger.Info(ctx, "HttpProductHandler")
 
 	var product model.Product
 	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
@@ -99,7 +66,7 @@ func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	created, err := h.service.Create(ctx, &product)
+	created, err := h.service.Create(r.Context(), &product)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -108,13 +75,10 @@ func (h *ProductHandler) Create(ctx context.Context, w http.ResponseWriter, r *h
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "updateProductByIdHandler")
+func (h *ProductHandler) Update(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Update")
 	defer span.End()
-
-	h.logging(span, "updateProductByIdHandler", r)
+	logger.Info(ctx, "HttpProductHandler")
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -128,20 +92,17 @@ func (h *ProductHandler) Update(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.service.Update(ctx, id, &p); err != nil {
+	if err := h.service.Update(r.Context(), id, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Product updated successfully"})
 }
 
-func (h *ProductHandler) Delete(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "deleteProductByIdHandler")
+func (h *ProductHandler) Delete(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Delete")
 	defer span.End()
-
-	h.logging(span, "deleteProductByIdHandler", r)
+	logger.Info(ctx, "HttpProductHandler")
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
@@ -149,7 +110,7 @@ func (h *ProductHandler) Delete(ctx context.Context, w http.ResponseWriter, r *h
 		return
 	}
 
-	if err := h.service.Delete(ctx, id); err != nil {
+	if err := h.service.Delete(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

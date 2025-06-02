@@ -5,44 +5,29 @@ import (
 	"errors"
 	"log/slog"
 
-	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
 	"simple-crud/internal/model"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/utils"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.opentelemetry.io/otel"
 )
 
 type ProductService struct {
 	repo *repository.ProductRepository
 }
 
+var ProductServiceTracer = otel.Tracer("ProductService")
+
 func NewProductService(repo *repository.ProductRepository) *ProductService {
 	return &ProductService{repo: repo}
 }
 
-func (s *ProductService) logging(span trace.Span, function string, filter string, payload *model.Product) {
-	log := logger.Instance()
-	log.Info("Service",
-		slog.String("trace_id", span.SpanContext().TraceID().String()),
-		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("function", function),
-		slog.String("filter", filter),
-		slog.String("payload", utils.ToJSONString(payload)),
-	)
-}
-
 func (s *ProductService) Create(ctx context.Context, p *model.Product) (*model.Product, error) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "createProductService")
+	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Create")
 	defer span.End()
-
-	s.logging(span, "getProductsService", "", p)
+	logger.Info(ctx, "Service", slog.String("payload", utils.ToJSONString(p)))
 
 	if p.Name == "" || p.Price <= 0 || p.Stock < 0 {
 		return nil, errors.New("invalid product data")
@@ -52,23 +37,17 @@ func (s *ProductService) Create(ctx context.Context, p *model.Product) (*model.P
 }
 
 func (s *ProductService) GetAll(ctx context.Context) ([]model.Product, error) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductsService")
+	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.GetAll")
 	defer span.End()
-
-	s.logging(span, "getProductsService", "", nil)
+	logger.Info(ctx, "Service")
 
 	return s.repo.FindAll(ctx)
 }
 
 func (s *ProductService) GetByID(ctx context.Context, id string) (*model.Product, error) {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "getProductByIdService")
+	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.GetByID")
 	defer span.End()
-
-	s.logging(span, "getProductByIdService", id, nil)
+	logger.Info(ctx, "Service", slog.String("filter", id))
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -78,12 +57,14 @@ func (s *ProductService) GetByID(ctx context.Context, id string) (*model.Product
 }
 
 func (s *ProductService) Update(ctx context.Context, id string, p *model.Product) error {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "updateProductByIdService")
+	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Update")
 	defer span.End()
-
-	s.logging(span, "updateProductByIdService", id, p)
+	logger.Info(
+		ctx,
+		"Service",
+		slog.String("filter", id),
+		slog.String("payload", utils.ToJSONString(p)),
+	)
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -93,12 +74,9 @@ func (s *ProductService) Update(ctx context.Context, id string, p *model.Product
 }
 
 func (s *ProductService) Delete(ctx context.Context, id string) error {
-	cfg := config.Instance()
-	tracer := otel.Tracer(cfg.AppName)
-	_, span := tracer.Start(ctx, "deleteProductByIdService")
+	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Delete")
 	defer span.End()
-
-	s.logging(span, "deleteProductByIdService", id, nil)
+	logger.Info(ctx, "Service", slog.String("filter", id))
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {

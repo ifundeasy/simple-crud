@@ -1,7 +1,6 @@
 package http
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -10,15 +9,15 @@ import (
 
 	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
-	"simple-crud/internal/utils"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type ExternalHandler struct {
 	URL string
 }
+
+var ExternalHandlerTracer = otel.Tracer("ExternalHandler")
 
 func NewExternalHandler(url string) *ExternalHandler {
 	return &ExternalHandler{
@@ -26,38 +25,15 @@ func NewExternalHandler(url string) *ExternalHandler {
 	}
 }
 
-var log = logger.Instance()
-
-func (h *ExternalHandler) logging(span trace.Span, function string, r *http.Request) {
-	var body []byte
-	if r.Body != nil {
-		body, _ = io.ReadAll(r.Body)
-		r.Body = io.NopCloser(io.NopCloser(io.MultiReader(bytes.NewBuffer(body))))
-	}
-	log.Info("HTTP External",
-		slog.String("trace_id", span.SpanContext().TraceID().String()),
-		slog.String("span_id", span.SpanContext().SpanID().String()),
-		slog.String("hostname", utils.GetHost()),
-		slog.String("function", function),
-		slog.String("http.method", r.Method),
-		slog.String("http.path", r.URL.Path),
-		slog.String("http.query", r.URL.RawQuery),
-		slog.String("http.remote", r.RemoteAddr),
-		slog.String("http.body", string(body)),
-	)
-}
-
-func (h *ExternalHandler) Fetch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	tracer := otel.Tracer("external-api")
-	_, span := tracer.Start(r.Context(), "fetchExternalHandler")
+func (h *ExternalHandler) Fetch(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+	ctx, span := ExternalHandlerTracer.Start(r.Context(), "ExternalHandler.Fetch")
 	defer span.End()
-
-	h.logging(span, "fetchExternalHandler", r)
+	logger.Info(ctx, "Handler")
 
 	cfg := config.Instance()
 	resp, err := http.Get(cfg.ExternalHTTP + "/products")
 	if err != nil {
-		log.Error("Failed to call external service", slog.String("error", err.Error()))
+		logger.Error(ctx, "Failed to call external service", slog.String("error", err.Error()))
 		http.Error(w, "External call failed", http.StatusInternalServerError)
 		return
 	}
@@ -65,13 +41,13 @@ func (h *ExternalHandler) Fetch(ctx context.Context, w http.ResponseWriter, r *h
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error("Failed to read response", slog.String("error", err.Error()))
+		logger.Error(ctx, "Failed to read response", slog.String("error", err.Error()))
 		http.Error(w, "Error reading external response", http.StatusInternalServerError)
 		return
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error("External service returned non-200", slog.Int("status_code", resp.StatusCode))
+		logger.Error(ctx, "External service returned non-200", slog.Int("status_code", resp.StatusCode))
 		http.Error(w, "External error", resp.StatusCode)
 		return
 	}

@@ -23,7 +23,7 @@ var (
 	once     sync.Once
 )
 
-func Instance(ctx context.Context, uri, dbName string) (*Mongo, error) {
+func Instance(globalCtx context.Context, uri, dbName string) (*Mongo, error) {
 	var err error
 
 	once.Do(func() {
@@ -39,7 +39,7 @@ func Instance(ctx context.Context, uri, dbName string) (*Mongo, error) {
 			SetMonitor(otelmongo.NewMonitor())
 
 		var log = logger.Instance()
-		client, connErr := mongo.Connect(ctx, opts)
+		client, connErr := mongo.Connect(globalCtx, opts)
 		if connErr != nil {
 			log.Error("Failed to connect to MongoDB", slog.String("error", connErr.Error()))
 			err = connErr
@@ -47,7 +47,7 @@ func Instance(ctx context.Context, uri, dbName string) (*Mongo, error) {
 		}
 
 		// Ping with timeout context
-		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		pingCtx, cancel := context.WithTimeout(globalCtx, 5*time.Second)
 		defer cancel()
 		if pingErr := client.Ping(pingCtx, nil); pingErr != nil {
 			log.Error("MongoDB ping failed", slog.String("error", pingErr.Error()))

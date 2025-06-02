@@ -23,7 +23,7 @@ var (
 )
 
 // Singleton Instance
-func Instance(ctx context.Context) (func(), error) {
+func Instance(globalCtx context.Context) (func(), error) {
 	once.Do(func() {
 		cfg := config.Instance()
 
@@ -42,7 +42,7 @@ func Instance(ctx context.Context) (func(), error) {
 		}
 
 		// OTLP exporter
-		exp, err := otlptracegrpc.New(ctx,
+		exp, err := otlptracegrpc.New(globalCtx,
 			otlptracegrpc.WithInsecure(),
 			otlptracegrpc.WithEndpoint(cfg.OtelRPCURI),
 			otlptracegrpc.WithCompressor("gzip"),
@@ -54,7 +54,7 @@ func Instance(ctx context.Context) (func(), error) {
 		}
 
 		// Tracer provider
-		res, err := resource.New(ctx,
+		res, err := resource.New(globalCtx,
 			resource.WithAttributes(
 				semconv.ServiceNameKey.String(cfg.AppName),
 				attribute.String("env", "production"),
@@ -75,7 +75,7 @@ func Instance(ctx context.Context) (func(), error) {
 		log.Info("OpenTelemetry Tracer initialized")
 
 		shutdownFunc = func() {
-			if err := tp.Shutdown(ctx); err != nil {
+			if err := tp.Shutdown(globalCtx); err != nil {
 				log.Error("Error shutting down tracer provider", slog.String("error", err.Error()))
 			}
 		}

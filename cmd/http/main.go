@@ -12,17 +12,15 @@ import (
 	"simple-crud/internal/database"
 	handler "simple-crud/internal/handler/http"
 	"simple-crud/internal/logger"
+	middleware_http "simple-crud/internal/middleware/http"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
 	"simple-crud/internal/tracer"
-	"simple-crud/internal/utils"
 	"simple-crud/internal/version"
-
-	"go.opentelemetry.io/otel"
 )
 
 func main() {
-	ctx := context.Background()
+	globalCtx := context.Background()
 	log := logger.Instance()
 	cfg := config.Instance()
 
@@ -33,11 +31,11 @@ func main() {
 	)
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
-	shutdown, _ := tracer.Instance(ctx)
+	shutdown, _ := tracer.Instance(globalCtx)
 	defer shutdown()
 
 	// Connect to MongoDB
-	db, err := database.Instance(ctx, cfg.MongoURI, cfg.MongoDBName)
+	db, err := database.Instance(globalCtx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
 		log.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
 		os.Exit(1)
@@ -53,67 +51,43 @@ func main() {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		tracer := otel.Tracer(cfg.AppName)
-		_, span := tracer.Start(r.Context(), "handlerRoot")
-		defer span.End()
-
-		log.Info("HTTP",
-			slog.String("trace_id", span.SpanContext().TraceID().String()),
-			slog.String("span_id", span.SpanContext().SpanID().String()),
-			slog.String("hostname", utils.GetHost()),
-			slog.String("http.method", r.Method),
-			slog.String("http.path", r.URL.Path),
-			slog.String("http.query", r.URL.RawQuery),
-			slog.String("http.remote", r.RemoteAddr),
-		)
 		resp := map[string]string{"data": "hello-world"}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
 	})
 
 	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
-		tracer := otel.Tracer(cfg.AppName)
-		ctx, span := tracer.Start(r.Context(), "handlerProducts")
-		defer span.End()
-
-		productHandler.GetAll(ctx, w, r)
+		productHandler.GetAll(globalCtx, w, r)
 	})
 
 	mux.HandleFunc("/product", func(w http.ResponseWriter, r *http.Request) {
-		tracer := otel.Tracer(cfg.AppName)
-		ctx, span := tracer.Start(r.Context(), "handlerProduct")
-		defer span.End()
-
 		switch r.Method {
 		case http.MethodGet:
-			productHandler.GetByID(ctx, w, r)
+			productHandler.GetByID(globalCtx, w, r)
 		case http.MethodPost:
-			productHandler.Create(ctx, w, r)
+			productHandler.Create(globalCtx, w, r)
 		case http.MethodPut:
-			productHandler.Update(ctx, w, r)
+			productHandler.Update(globalCtx, w, r)
 		case http.MethodDelete:
-			productHandler.Delete(ctx, w, r)
+			productHandler.Delete(globalCtx, w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
 	mux.HandleFunc("/external", func(w http.ResponseWriter, r *http.Request) {
-		tracer := otel.Tracer(cfg.AppName)
-		ctx, span := tracer.Start(r.Context(), "handlerExternal")
-		defer span.End()
-
 		if r.Method == http.MethodGet {
-			externalHandler.Fetch(ctx, w, r)
+			externalHandler.Fetch(globalCtx, w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
 	// HTTP server
+	wrappedMux := middleware_http.TraceMiddleware(globalCtx)(mux)
 	server := &http.Server{
 		Addr:         ":" + cfg.AppPort,
-		Handler:      mux,
+		Handler:      wrappedMux,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}

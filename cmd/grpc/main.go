@@ -14,6 +14,7 @@ import (
 	grpcHandler "simple-crud/internal/handler/grpc"
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/logger"
+	middleware_grpc "simple-crud/internal/middleware/grpc"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
 	"simple-crud/internal/tracer"
@@ -21,7 +22,7 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	globalCtx := context.Background()
 	log := logger.Instance()
 	cfg := config.Instance()
 
@@ -32,11 +33,11 @@ func main() {
 	)
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
-	shutdown, _ := tracer.Instance(ctx)
+	shutdown, _ := tracer.Instance(globalCtx)
 	defer shutdown()
 
 	// Connect to MongoDB
-	db, err := database.Instance(ctx, cfg.MongoURI, cfg.MongoDBName)
+	db, err := database.Instance(globalCtx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
 		log.Error("Failed to connect to MongoDB", "error", err)
 		os.Exit(1)
@@ -48,7 +49,9 @@ func main() {
 	productHandler := grpcHandler.NewProductGRPCHandler(productService)
 
 	// Start gRPC server
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware_grpc.UnaryTracingInterceptor(globalCtx)),
+	)
 	pb.RegisterProductServiceServer(grpcServer, productHandler)
 	reflection.Register(grpcServer)
 
