@@ -21,6 +21,7 @@ type Config struct {
 	ExternalHTTP       string
 	OtelRPCURI         string
 	PyroscopeURI       string
+	PyroscopTenantId   string
 }
 
 var log = logger.Instance()
@@ -65,6 +66,7 @@ func Instance() *Config {
 			ExternalHTTP:       os.Getenv("EXTERNAL_HTTP"),
 			OtelRPCURI:         os.Getenv("OTEL_RPC_URI"),
 			PyroscopeURI:       os.Getenv("PYROSCOPE_URI"),
+			PyroscopTenantId:   os.Getenv("PYROSCOPE_TENANTID"),
 		}
 
 		// Validate required env

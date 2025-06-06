@@ -7,7 +7,9 @@ import (
 	"simple-crud/internal/logger"
 	"sync"
 
+	otelpyroscope "github.com/grafana/otel-profiling-go"
 	"github.com/grafana/pyroscope-go"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -22,24 +24,17 @@ var (
 	initErr      error
 )
 
+var pyroLogrus = func() *logrus.Logger {
+	l := logrus.New()
+	l.SetLevel(logrus.InfoLevel)
+	return l
+}()
+
 // Singleton Instance
 func Instance(globalCtx context.Context) (func(), error) {
 	once.Do(func() {
 		cfg := config.Instance()
-
-		// Start Pyroscope
-		_, err := pyroscope.Start(pyroscope.Config{
-			ApplicationName: cfg.AppName,
-			ServerAddress:   cfg.PyroscopeURI,
-			Logger:          pyroscope.StandardLogger,
-		})
-
 		log := logger.Instance()
-		if err != nil {
-			log.Error("Pyroscope failed to start", slog.String("error", err.Error()))
-		} else {
-			log.Info("Pyroscope started successfully")
-		}
 
 		// OTLP exporter
 		exp, err := otlptracegrpc.New(globalCtx,
@@ -70,9 +65,24 @@ func Instance(globalCtx context.Context) (func(), error) {
 			trace.WithBatcher(exp),
 			trace.WithResource(res),
 		)
-		otel.SetTracerProvider(tp)
 
+		// Init Open Telemetry tracer and also link to profiler
+		otel.SetTracerProvider(otelpyroscope.NewTracerProvider(tp))
 		log.Info("OpenTelemetry Tracer initialized")
+
+		// Start Pyroscope
+		_, err2 := pyroscope.Start(pyroscope.Config{
+			ApplicationName: cfg.AppName,
+			ServerAddress:   cfg.PyroscopeURI,
+			TenantID:        cfg.PyroscopTenantId,
+			// Logger:          pyroscope.StandardLogger,
+			Logger: pyroLogrus,
+		})
+		if err2 != nil {
+			log.Error("Pyroscope failed to start", slog.String("error", err2.Error()))
+		} else {
+			log.Info("Pyroscope started successfully")
+		}
 
 		shutdownFunc = func() {
 			if err := tp.Shutdown(globalCtx); err != nil {
