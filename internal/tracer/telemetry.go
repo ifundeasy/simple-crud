@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -36,7 +37,7 @@ func Instance(globalCtx context.Context) (func(), error) {
 		cfg := config.Instance()
 		log := logger.Instance()
 
-		// OTLP exporter
+		// OTLP exporter (Tempo, etc)
 		exp, err := otlptracegrpc.New(globalCtx,
 			otlptracegrpc.WithInsecure(),
 			otlptracegrpc.WithEndpoint(cfg.OtelRPCURI),
@@ -48,7 +49,7 @@ func Instance(globalCtx context.Context) (func(), error) {
 			return
 		}
 
-		// Tracer provider
+		// OpenTelemetry Resource (service name, env, etc)
 		res, err := resource.New(globalCtx,
 			resource.WithAttributes(
 				semconv.ServiceNameKey.String(cfg.AppName),
@@ -66,11 +67,18 @@ func Instance(globalCtx context.Context) (func(), error) {
 			trace.WithResource(res),
 		)
 
-		// Init Open Telemetry tracer and also link to profiler
+		// Set tracer provider WITH pyroscope attached
 		otel.SetTracerProvider(otelpyroscope.NewTracerProvider(tp))
+
+		// Register the trace context and baggage propagators so data is propagated across services/processes.
+		otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+			propagation.TraceContext{},
+			propagation.Baggage{},
+		))
+
 		log.Info("OpenTelemetry Tracer initialized")
 
-		// Start Pyroscope
+		// Start Pyroscope profiler agent
 		_, err2 := pyroscope.Start(pyroscope.Config{
 			ApplicationName: cfg.AppName,
 			ServerAddress:   cfg.PyroscopeURI,
