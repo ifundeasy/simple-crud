@@ -47,6 +47,10 @@ func main() {
 	productHandler := handler.NewProductHandler(productService)
 	externalHandler := handler.NewExternalHandler(cfg.ExternalHTTP)
 
+	// Wiring health service
+	healthService := service.NewHealthService(db.Client)
+	healthHandler := handler.NewHealthHandler(healthService)
+
 	// Routing
 	mux := http.NewServeMux()
 
@@ -83,6 +87,15 @@ func main() {
 		if r.Method == http.MethodGet {
 			externalHandler.Fetch(globalCtx, w, r)
 		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			healthHandler.Check(globalCtx, w, r)
+		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})

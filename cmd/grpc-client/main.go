@@ -7,6 +7,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
@@ -46,13 +47,22 @@ func main() {
 
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		resp, err := client.GetAll(ctx, &emptypb.Empty{})
+		var trailer metadata.MD
+		resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
 		cancel()
 
+		// Extract trace-id from trailer
+		traceIDs := trailer.Get("x-trace-id")
+		if len(traceIDs) < 1 {
+			log.Warn("No Trace ID received")
+		}
+
 		if err != nil {
-			log.Error("Error calling GetAll: %v", err)
+			log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceIDs[0]))
 		} else {
-			log.Info("Received products from: "+resp.Resolver,
+			log.Info("Received products",
+				slog.String("resolver", resp.Resolver),
+				slog.String("trace_id", traceIDs[0]),
 				slog.Int("count", len(resp.GetProducts())),
 			)
 		}
