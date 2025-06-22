@@ -3,25 +3,26 @@ package config
 import (
 	"log/slog"
 	"os"
-	"simple-crud/internal/logger"
 	"strconv"
 	"sync"
+
+	"simple-crud/internal/logger"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AppPort            string
-	AppName            string
-	AppClientDelayMs   int64
-	DnsResolverDelayMs int64
-	MongoURI           string
-	MongoDBName        string
-	ExternalGRPC       string
-	ExternalHTTP       string
-	OtelRPCURI         string
-	PyroscopeURI       string
-	PyroscopTenantId   string
+	AppPort                string
+	AppName                string
+	AppClientDelayMs       int64
+	DnsResolverDelayMs     int64
+	MongoURI               string
+	MongoDBName            string
+	ExternalGRPC           string
+	ExternalHTTP           string
+	RemoteLogHttpURI       string
+	RemoteTraceRpcURI      string
+	RemoteProfilingHttpURI string
 }
 
 var log = logger.Instance()
@@ -56,17 +57,28 @@ func Instance() *Config {
 		}
 
 		configInstance = &Config{
-			AppPort:            os.Getenv("APP_PORT"),
-			AppName:            os.Getenv("APP_NAME"),
-			AppClientDelayMs:   setInt64("APP_CLIENT_DELAY_MS"),
-			DnsResolverDelayMs: setInt64("DNS_RESOLVER_DELAY_MS"),
-			MongoURI:           os.Getenv("MONGO_URI"),
-			MongoDBName:        os.Getenv("MONGO_DB_NAME"),
-			ExternalGRPC:       os.Getenv("EXTERNAL_GRPC"),
-			ExternalHTTP:       os.Getenv("EXTERNAL_HTTP"),
-			OtelRPCURI:         os.Getenv("OTEL_RPC_URI"),
-			PyroscopeURI:       os.Getenv("PYROSCOPE_URI"),
-			PyroscopTenantId:   os.Getenv("PYROSCOPE_TENANTID"),
+			AppPort:                os.Getenv("APP_PORT"),
+			AppName:                os.Getenv("APP_NAME"),
+			AppClientDelayMs:       setInt64("APP_CLIENT_DELAY_MS"),
+			DnsResolverDelayMs:     setInt64("DNS_RESOLVER_DELAY_MS"),
+			MongoURI:               os.Getenv("MONGO_URI"),
+			MongoDBName:            os.Getenv("MONGO_DB_NAME"),
+			ExternalGRPC:           os.Getenv("EXTERNAL_GRPC"),
+			ExternalHTTP:           os.Getenv("EXTERNAL_HTTP"),
+			RemoteLogHttpURI:       os.Getenv("REMOTE_LOG_HTTP_URI"),
+			RemoteTraceRpcURI:      os.Getenv("REMOTE_TRACE_RPC_URI"),
+			RemoteProfilingHttpURI: os.Getenv("REMOTE_PROFILING_HTTP_URI"),
+		}
+
+		// Optional but recommended
+		if configInstance.RemoteLogHttpURI == "" {
+			log.Warn("Missing REMOTE_LOG_HTTP_URI will skip sending log")
+		}
+		if configInstance.RemoteTraceRpcURI == "" {
+			log.Warn("Missing REMOTE_TRACE_RPC_URI will skip sending trace")
+		}
+		if configInstance.RemoteProfilingHttpURI == "" {
+			log.Warn("Missing REMOTE_PROFILING_HTTP_URI will skip sending profiling")
 		}
 
 		// Validate required env
@@ -88,12 +100,6 @@ func Instance() *Config {
 		}
 		if configInstance.ExternalHTTP == "" {
 			missing = append(missing, "EXTERNAL_HTTP")
-		}
-		if configInstance.OtelRPCURI == "" {
-			missing = append(missing, "OTEL_RPC_URI")
-		}
-		if configInstance.PyroscopeURI == "" {
-			missing = append(missing, "PYROSCOPE_URI")
 		}
 
 		if len(missing) > 0 {

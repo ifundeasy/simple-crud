@@ -27,15 +27,21 @@ func Instance() *slog.Logger {
 }
 
 func Info(ctx context.Context, msg string, attrs ...slog.Attr) {
-	Instance().Info(msg, attrsToArgs(enrich(ctx, attrs...))...)
+	enrichedAttrs := enrich(ctx, attrs...)
+	Instance().Info(msg, attrsToArgs(enrichedAttrs)...)
+	sendLog("info", msg, enrichedAttrs)
 }
 
 func Warn(ctx context.Context, msg string, attrs ...slog.Attr) {
-	Instance().Warn(msg, attrsToArgs(enrich(ctx, attrs...))...)
+	enrichedAttrs := enrich(ctx, attrs...)
+	Instance().Warn(msg, attrsToArgs(enrichedAttrs)...)
+	sendLog("warn", msg, enrichedAttrs)
 }
 
 func Error(ctx context.Context, msg string, attrs ...slog.Attr) {
-	Instance().Error(msg, attrsToArgs(enrich(ctx, attrs...))...)
+	enrichedAttrs := enrich(ctx, attrs...)
+	Instance().Error(msg, attrsToArgs(enrichedAttrs)...)
+	sendLog("error", msg, enrichedAttrs)
 }
 
 func enrich(ctx context.Context, attrs ...slog.Attr) []slog.Attr {

@@ -40,7 +40,7 @@ func Instance(globalCtx context.Context) (func(), error) {
 		// OTLP exporter (Tempo, etc)
 		exp, err := otlptracegrpc.New(globalCtx,
 			otlptracegrpc.WithInsecure(),
-			otlptracegrpc.WithEndpoint(cfg.OtelRPCURI),
+			otlptracegrpc.WithEndpoint(cfg.RemoteTraceRpcURI),
 			otlptracegrpc.WithCompressor("gzip"),
 		)
 		if err != nil {
@@ -81,8 +81,8 @@ func Instance(globalCtx context.Context) (func(), error) {
 		// Start Pyroscope profiler agent
 		_, err2 := pyroscope.Start(pyroscope.Config{
 			ApplicationName: cfg.AppName,
-			ServerAddress:   cfg.PyroscopeURI,
-			TenantID:        cfg.PyroscopTenantId,
+			ServerAddress:   cfg.RemoteProfilingHttpURI,
+			// TenantID:        cfg.RemoteProfilingTenantId,
 			// Logger:          pyroscope.StandardLogger,
 			Logger: pyroLogrus,
 		})
