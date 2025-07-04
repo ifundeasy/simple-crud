@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -32,7 +33,7 @@ func main() {
 
 	log.Info("HTTP client started",
 		slog.String("target", cfg.ExternalHTTP),
-		slog.Int("delay_ms", int(cfg.AppClientDelayMs)),
+		slog.Int("delay_ms", int(cfg.ClientMaxSleepMs)),
 	)
 
 	client := http.Client{Timeout: 2 * time.Second}
@@ -40,20 +41,36 @@ func main() {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ExternalHTTP+"/products", nil)
+		paths := []string{"/external", "/products", "/just-not-found"}
+		path := paths[rand.Intn(len(paths))]
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ExternalHTTP+path, nil)
 		if err != nil {
-			log.Error("Failed to build request", slog.String("error", err.Error()))
+			log.Error("Failed to build request",
+				slog.String("error", err.Error()),
+				slog.String("trace_id", "empty"),
+			)
 			cancel()
-			time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+			delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+			time.Sleep(delay)
 			continue
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Error("Failed to request", slog.String("error", err.Error()))
+			log.Error("Failed to request",
+				slog.String("error", err.Error()),
+				slog.String("trace_id", "empty"),
+			)
 			cancel()
-			time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+			delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+			time.Sleep(delay)
 			continue
+		}
+
+		// Extract trace ID from response header
+		traceID := resp.Header.Get("X-TRACE-ID")
+		if traceID == "" {
+			traceID = "empty"
 		}
 
 		body, err := io.ReadAll(resp.Body)
@@ -61,19 +78,32 @@ func main() {
 		cancel()
 
 		if err != nil {
-			log.Error("Failed to read body", slog.String("error", err.Error()))
-			time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+			log.Error("Failed to read body",
+				slog.String("error", err.Error()),
+				slog.String("trace_id", traceID),
+			)
+			delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+			time.Sleep(delay)
 			continue
 		}
 
 		var out []any
 		if err := json.Unmarshal(body, &out); err != nil {
-			log.Error("Invalid JSON response", slog.String("body", string(body)))
-			time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+			log.Error("Invalid JSON response",
+				slog.String("body", string(body)),
+				slog.String("trace_id", traceID),
+			)
+			delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+			time.Sleep(delay)
 			continue
 		}
 
-		log.Info("Received products", slog.Int("count", len(out)))
-		time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+		log.Info("Received products",
+			slog.Int("count", len(out)),
+			slog.String("trace_id", traceID),
+		)
+
+		delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+		time.Sleep(delay)
 	}
 }

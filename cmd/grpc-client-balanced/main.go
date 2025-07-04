@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"log/slog"
+	"math/rand"
 	"net"
 	"sort"
 	"strings"
@@ -139,21 +140,26 @@ func grpcWorker(notify chan struct{}) {
 
 				// Extract trace-id from trailer
 				traceIDs := trailer.Get("x-trace-id")
+				var traceID string
 				if len(traceIDs) < 1 {
+					traceID = "empty"
 					log.Warn("No Trace ID received")
+				} else {
+					traceID = traceIDs[0]
 				}
 
 				if err != nil {
-					log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceIDs[0]))
+					log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceID))
 				} else {
 					log.Info("Received products",
 						slog.String("resolver", resp.Resolver),
-						slog.String("trace_id", traceIDs[0]),
+						slog.String("trace_id", traceID),
 						slog.Int("count", len(resp.GetProducts())),
 					)
 				}
 			}
-			time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+			delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
+			time.Sleep(delay)
 		}
 	}
 }

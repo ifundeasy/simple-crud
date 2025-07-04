@@ -14,7 +14,7 @@ import (
 type Config struct {
 	AppPort                string
 	AppName                string
-	AppClientDelayMs       int64
+	ClientMaxSleepMs       int64
 	DnsResolverDelayMs     int64
 	MongoURI               string
 	MongoDBName            string
@@ -59,7 +59,7 @@ func Instance() *Config {
 		configInstance = &Config{
 			AppPort:                os.Getenv("APP_PORT"),
 			AppName:                os.Getenv("APP_NAME"),
-			AppClientDelayMs:       setInt64("APP_CLIENT_DELAY_MS"),
+			ClientMaxSleepMs:       setInt64("APP_CLIENT_MAX_SLEEP_MS"),
 			DnsResolverDelayMs:     setInt64("DNS_RESOLVER_DELAY_MS"),
 			MongoURI:               os.Getenv("MONGO_URI"),
 			MongoDBName:            os.Getenv("MONGO_DB_NAME"),

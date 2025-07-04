@@ -42,7 +42,7 @@ func main() {
 
 	log.Info("gRPC client started",
 		slog.String("target", cfg.ExternalGRPC),
-		slog.Int("delay_ms", int(cfg.AppClientDelayMs)),
+		slog.Int("delay_ms", int(cfg.ClientMaxSleepMs)),
 	)
 
 	for {
@@ -53,20 +53,24 @@ func main() {
 
 		// Extract trace-id from trailer
 		traceIDs := trailer.Get("x-trace-id")
+		var traceID string
 		if len(traceIDs) < 1 {
+			traceID = "empty"
 			log.Warn("No Trace ID received")
+		} else {
+			traceID = traceIDs[0]
 		}
 
 		if err != nil {
-			log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceIDs[0]))
+			log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceID))
 		} else {
 			log.Info("Received products",
 				slog.String("resolver", resp.Resolver),
-				slog.String("trace_id", traceIDs[0]),
+				slog.String("trace_id", traceID),
 				slog.Int("count", len(resp.GetProducts())),
 			)
 		}
 
-		time.Sleep(time.Duration(cfg.AppClientDelayMs) * time.Millisecond)
+		time.Sleep(time.Duration(cfg.ClientMaxSleepMs) * time.Millisecond)
 	}
 }
