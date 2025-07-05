@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"simple-crud/internal/config"
@@ -20,24 +22,28 @@ import (
 )
 
 func main() {
-	globalCtx := context.Background()
-	log := logger.Instance()
+	// Create cancellable context for graceful shutdown
+	bgCtx := context.Background()
+	globalCtx, cancel := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logger.Instance()
 	cfg := config.Instance()
 
-	log.Info(cfg.AppName,
+	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
 	)
 
-	// Initialize telemetry (OpenTelemetry + Pyroscope)
+	// Initialize telemetry
 	shutdown, _ := tracer.Instance(globalCtx)
 	defer shutdown()
 
 	// Connect to MongoDB
 	db, err := database.Instance(globalCtx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
-		log.Error("Failed to connect to MongoDB", slog.String("error", err.Error()))
+		logger.Error(globalCtx, "Failed to connect to MongoDB", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
@@ -65,19 +71,19 @@ func main() {
 	})
 
 	mux.HandleFunc("/products", func(w http.ResponseWriter, r *http.Request) {
-		productHandler.GetAll(globalCtx, w, r)
+		productHandler.GetAll(w, r)
 	})
 
 	mux.HandleFunc("/product", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			productHandler.GetByID(globalCtx, w, r)
+			productHandler.GetByID(w, r)
 		case http.MethodPost:
-			productHandler.Create(globalCtx, w, r)
+			productHandler.Create(w, r)
 		case http.MethodPut:
-			productHandler.Update(globalCtx, w, r)
+			productHandler.Update(w, r)
 		case http.MethodDelete:
-			productHandler.Delete(globalCtx, w, r)
+			productHandler.Delete(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -85,7 +91,7 @@ func main() {
 
 	mux.HandleFunc("/external", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			externalHandler.Fetch(globalCtx, w, r)
+			externalHandler.Fetch(w, r)
 		} else {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -94,7 +100,7 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			healthHandler.Check(globalCtx, w, r)
+			healthHandler.Check(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -109,10 +115,22 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	log.Info("HTTP server running", slog.String("addr", server.Addr))
+	go func() {
+		logger.Info(globalCtx, "HTTP server running", slog.String("addr", server.Addr))
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error(globalCtx, "Server error", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}()
 
-	if err := server.ListenAndServe(); err != nil {
-		log.Error("Server failed", slog.String("error", err.Error()))
-		os.Exit(1)
+	<-globalCtx.Done() // wait for interrupt
+	logger.Info(globalCtx, "Shutting down server")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error(globalCtx, "Graceful shutdown failed", slog.String("error", err.Error()))
+	} else {
+		logger.Info(globalCtx, "Server exited properly")
 	}
 }

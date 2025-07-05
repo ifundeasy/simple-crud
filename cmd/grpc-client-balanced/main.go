@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"math/rand"
 	"net"
+	"os/signal"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -18,15 +20,16 @@ import (
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/logger"
+	"simple-crud/internal/tracer"
 	"simple-crud/internal/version"
 
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
 	conn   *grpc.ClientConn
 	client pb.ProductServiceClient
-	log    = logger.Instance()
 	cfg    = config.Instance()
 )
 
@@ -45,7 +48,7 @@ func resolvePods(host string) ([]string, error) {
 }
 
 // connect establishes gRPC client connection to the backend server using round_robin policy.
-func connect(target string) error {
+func connect(globalCtx context.Context, target string) error {
 	var err error
 	conn, err = grpc.NewClient(
 		target,
@@ -53,24 +56,23 @@ func connect(target string) error {
 		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 	)
 	if err != nil {
-		log.Error("Failed to dial gRPC", slog.String("error", err.Error()))
+		logger.Error(globalCtx, "Failed to dial gRPC", slog.String("error", err.Error()))
 		return err
 	}
 	client = pb.NewProductServiceClient(conn)
-	log.Info("gRPC connected", slog.String("target", target))
+	logger.Info(globalCtx, "gRPC connected", slog.String("target", target))
 	return nil
 }
 
-// disconnect closes the gRPC connection.
-func disconnect() {
+func disconnect(globalCtx context.Context) {
 	if conn != nil {
 		conn.Close()
-		log.Info("gRPC connection closed")
+		logger.Info(globalCtx, "gRPC connection closed")
 	}
 }
 
 // dnsWatcher periodically resolves DNS and notifies the gRPC worker if any changes detected.
-func dnsWatcher(host string, notify chan struct{}) {
+func dnsWatcher(globalCtx context.Context, host string, notify chan struct{}) {
 	var lastHash string
 	var consecutiveFail int
 	var cleanHost string = host
@@ -82,16 +84,23 @@ func dnsWatcher(host string, notify chan struct{}) {
 	cleanHost = strings.Split(cleanHost, ":")[0]
 
 	for {
-		log.Info("Just keep watching gRPC DNS..", slog.Any("host", cleanHost))
+		select {
+		case <-globalCtx.Done():
+			logger.Info(globalCtx, "DNS watcher shutting down")
+			return
+		default:
+		}
+
+		logger.Info(globalCtx, "Just keep watching gRPC DNS..", slog.Any("host", cleanHost))
 		addrs, err := resolvePods(cleanHost)
 		if err != nil {
 			// DNS lookup failed
-			log.Error("DNS lookup failed", slog.Any("host", cleanHost), slog.String("error", err.Error()))
+			logger.Error(globalCtx, "DNS lookup failed", slog.Any("host", cleanHost), slog.String("error", err.Error()))
 			consecutiveFail++
 
 			// Go's built-in net.LookupHost() does not implement any DNS retry, failover, or backoff strategy.
 			if consecutiveFail >= 3 {
-				log.Warn("DNS lookup failed 3 times consecutively, forcing reconnect", slog.Any("host", cleanHost))
+				logger.Warn(globalCtx, "DNS lookup failed 3 times consecutively, forcing reconnect", slog.Any("host", cleanHost))
 				notify <- struct{}{}
 				consecutiveFail = 0
 			}
@@ -99,59 +108,57 @@ func dnsWatcher(host string, notify chan struct{}) {
 			continue
 		}
 
-		// DNS lookup succeeded → reset failure counter
 		consecutiveFail = 0
-
-		// Calculate hash of resolved pod IP addresses
-		sort.Strings(addrs) // Sort it first! this is important to prevent same items but with random index
+		sort.Strings(addrs)
 		newHash := hashAddresses(addrs)
 		if newHash != lastHash {
-			log.Info("Detected backend pod change", slog.Any("host", cleanHost), slog.Any("addresses", addrs))
+			logger.Info(globalCtx, "Detected backend pod change", slog.Any("host", cleanHost), slog.Any("addresses", addrs))
 			lastHash = newHash
 			notify <- struct{}{}
 		}
-
-		// Wait before next DNS check
 		time.Sleep(time.Duration(cfg.DnsResolverDelayMs) * time.Millisecond)
 	}
 }
 
 // grpcWorker performs gRPC request loop and reconnects whenever DNS watcher sends signal.
-func grpcWorker(notify chan struct{}) {
-	defer disconnect()
-	err := connect(cfg.ExternalGRPC)
+func grpcWorker(globalCtx context.Context, notify chan struct{}) {
+	tracer := otel.Tracer("grpc-client")
+	defer disconnect(globalCtx)
+	err := connect(globalCtx, cfg.ExternalGRPC)
 	if err != nil {
-		log.Error("Initial gRPC connection failed, will retry on next DNS change")
+		logger.Error(globalCtx, "Initial gRPC connection failed, will retry on next DNS change")
 	}
 
 	for {
 		select {
+		case <-globalCtx.Done():
+			logger.Info(globalCtx, "Shutting down gRPC worker")
+			return
 		case <-notify:
-			log.Info("Reconnecting due to DNS update or failure threshold")
-			disconnect()
-			connect(cfg.ExternalGRPC)
-
+			logger.Info(globalCtx, "Reconnecting due to DNS update or failure threshold")
+			disconnect(globalCtx)
+			connect(globalCtx, cfg.ExternalGRPC)
 		default:
 			if client != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
+				ctx, span := tracer.Start(ctx, "grpc-request")
 				var trailer metadata.MD
 				resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
 				cancel()
+				span.End()
 
-				// Extract trace-id from trailer
 				traceIDs := trailer.Get("x-trace-id")
-				var traceID string
-				if len(traceIDs) < 1 {
-					traceID = "empty"
-					log.Warn("No Trace ID received")
-				} else {
+				traceID := "empty"
+				if len(traceIDs) > 0 {
 					traceID = traceIDs[0]
+				} else {
+					logger.Warn(ctx, "No Trace ID received")
 				}
 
 				if err != nil {
-					log.Error("Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceID))
+					logger.Error(ctx, "Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceID))
 				} else {
-					log.Info("Received products",
+					logger.Info(ctx, "Received products",
 						slog.String("resolver", resp.Resolver),
 						slog.String("trace_id", traceID),
 						slog.Int("count", len(resp.GetProducts())),
@@ -165,17 +172,24 @@ func grpcWorker(notify chan struct{}) {
 }
 
 func main() {
-	log.Info(cfg.AppName,
+	logger.Instance()
+	bgCtx := context.Background()
+	globalCtx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
 	)
 
+	_, _ = tracer.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it’s long-lived client)
+
 	notify := make(chan struct{}, 1)
 
 	// Start DNS watcher goroutine
-	go dnsWatcher(cfg.ExternalGRPC, notify)
+	go dnsWatcher(globalCtx, cfg.ExternalGRPC, notify)
 
 	// Start gRPC worker loop
-	grpcWorker(notify)
+	grpcWorker(globalCtx, notify)
 }

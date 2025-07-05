@@ -59,7 +59,7 @@ func Instance() *Config {
 		configInstance = &Config{
 			AppPort:                os.Getenv("APP_PORT"),
 			AppName:                os.Getenv("APP_NAME"),
-			ClientMaxSleepMs:       setInt64("APP_CLIENT_MAX_SLEEP_MS"),
+			ClientMaxSleepMs:       setInt64("CLIENT_MAX_SLEEP_MS"),
 			DnsResolverDelayMs:     setInt64("DNS_RESOLVER_DELAY_MS"),
 			MongoURI:               os.Getenv("MONGO_URI"),
 			MongoDBName:            os.Getenv("MONGO_DB_NAME"),

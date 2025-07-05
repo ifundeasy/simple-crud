@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -22,11 +24,15 @@ import (
 )
 
 func main() {
-	globalCtx := context.Background()
-	log := logger.Instance()
+	// Create cancellable context for graceful shutdown
+	bgCtx := context.Background()
+	globalCtx, cancel := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	logger.Instance()
 	cfg := config.Instance()
 
-	log.Info(cfg.AppName,
+	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
@@ -39,7 +45,7 @@ func main() {
 	// Connect to MongoDB
 	db, err := database.Instance(globalCtx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
-		log.Error("Failed to connect to MongoDB", "error", err)
+		logger.Error(globalCtx, "Failed to connect to MongoDB", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
@@ -50,19 +56,31 @@ func main() {
 
 	// Start gRPC server
 	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(middleware_grpc.UnaryTracingInterceptor(globalCtx)),
+		grpc.UnaryInterceptor(middleware_grpc.UnaryTracingInterceptor()),
 	)
 	pb.RegisterProductServiceServer(grpcServer, productHandler)
 	reflection.Register(grpcServer)
 
 	lis, err := net.Listen("tcp", ":"+cfg.AppPort)
 	if err != nil {
-		log.Error("failed to listen: %v", err)
+		logger.Error(globalCtx, "failed to listen", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
-	log.Info("gRPC server running", "port", cfg.AppPort)
+	logger.Info(globalCtx, "gRPC server running", slog.String("port", cfg.AppPort))
 
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Error("failed to serve: %v", err)
-	}
+	// Run gRPC server in background
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			logger.Error(globalCtx, "failed to serve", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for shutdown signal
+	<-globalCtx.Done()
+	logger.Info(globalCtx, "Shutting down gRPC server")
+
+	grpcServer.GracefulStop()
+	logger.Info(globalCtx, "gRPC server exited cleanly")
 }

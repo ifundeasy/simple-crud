@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"io"
 	"net/http"
 
@@ -25,7 +24,7 @@ func NewExternalHandler(url string) *ExternalHandler {
 	}
 }
 
-func (h *ExternalHandler) Fetch(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ExternalHandler) Fetch(w http.ResponseWriter, r *http.Request) {
 	ctx, span := ExternalHandlerTracer.Start(r.Context(), "ExternalHandler.Fetch")
 	defer span.End()
 	logger.Info(ctx, "Handler")

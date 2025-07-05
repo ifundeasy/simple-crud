@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -24,7 +23,7 @@ func NewProductHandler(service *service.ProductService) *ProductHandler {
 	}
 }
 
-func (h *ProductHandler) GetAll(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetAll")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
@@ -37,7 +36,7 @@ func (h *ProductHandler) GetAll(globalCtx context.Context, w http.ResponseWriter
 	_ = json.NewEncoder(w).Encode(products)
 }
 
-func (h *ProductHandler) GetByID(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetByID")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
@@ -55,7 +54,7 @@ func (h *ProductHandler) GetByID(globalCtx context.Context, w http.ResponseWrite
 	_ = json.NewEncoder(w).Encode(product)
 }
 
-func (h *ProductHandler) Create(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Create")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
@@ -75,7 +74,7 @@ func (h *ProductHandler) Create(globalCtx context.Context, w http.ResponseWriter
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-func (h *ProductHandler) Update(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Update")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
@@ -99,7 +98,7 @@ func (h *ProductHandler) Update(globalCtx context.Context, w http.ResponseWriter
 	_ = json.NewEncoder(w).Encode(map[string]string{"message": "Product updated successfully"})
 }
 
-func (h *ProductHandler) Delete(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Delete")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")

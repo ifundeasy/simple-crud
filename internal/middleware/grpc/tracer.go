@@ -18,7 +18,7 @@ import (
 
 var tracer = otel.Tracer("GrpcMiddleware")
 
-func UnaryTracingInterceptor(globalCtx context.Context) grpc.UnaryServerInterceptor {
+func UnaryTracingInterceptor() grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,
 		req any,

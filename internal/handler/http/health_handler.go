@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -23,7 +22,7 @@ func NewHealthHandler(service *service.HealthService) *HealthHandler {
 	}
 }
 
-func (h *HealthHandler) Check(globalCtx context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	ctx, span := HttpHealthHandlerTracer.Start(r.Context(), "HttpHealthHandler.GetAll")
 	defer span.End()
 	logger.Info(ctx, "HttpHealthHandler")
