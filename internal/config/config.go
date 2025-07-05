@@ -25,6 +25,36 @@ type Config struct {
 	RemoteProfilingHttpURI string
 }
 
+// SafeConfig adalah struct untuk logging yang aman (tanpa sensitive data)
+type SafeConfig struct {
+	AppPort                string `json:"app_port"`
+	AppName                string `json:"app_name"`
+	ClientMaxSleepMs       int64  `json:"client_max_sleep_ms"`
+	DnsResolverDelayMs     int64  `json:"dns_resolver_delay_ms"`
+	MongoDBName            string `json:"mongo_db_name"`
+	ExternalGRPC           string `json:"external_grpc"`
+	ExternalHTTP           string `json:"external_http"`
+	RemoteLogHttpURI       string `json:"remote_log_http_uri"`
+	RemoteTraceRpcURI      string `json:"remote_trace_rpc_uri"`
+	RemoteProfilingHttpURI string `json:"remote_profiling_http_uri"`
+}
+
+// ToSafeConfig mengkonversi Config ke SafeConfig untuk logging
+func (c *Config) ToSafeConfig() SafeConfig {
+	return SafeConfig{
+		AppPort:                c.AppPort,
+		AppName:                c.AppName,
+		ClientMaxSleepMs:       c.ClientMaxSleepMs,
+		DnsResolverDelayMs:     c.DnsResolverDelayMs,
+		MongoDBName:            c.MongoDBName,
+		ExternalGRPC:           c.ExternalGRPC,
+		ExternalHTTP:           c.ExternalHTTP,
+		RemoteLogHttpURI:       c.RemoteLogHttpURI,
+		RemoteTraceRpcURI:      c.RemoteTraceRpcURI,
+		RemoteProfilingHttpURI: c.RemoteProfilingHttpURI,
+	}
+}
+
 var log = logger.Instance()
 var (
 	configInstance *Config
@@ -107,7 +137,7 @@ func Instance() *Config {
 			os.Exit(1)
 		}
 
-		log.Info("Configuration loaded successfully", slog.Any("config", configInstance))
+		log.Info("Configuration loaded successfully", slog.Any("config", configInstance.ToSafeConfig()))
 	})
 
 	return configInstance
