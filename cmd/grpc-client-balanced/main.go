@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net"
+	"os"
 	"os/signal"
 	"sort"
 	"strings"
@@ -177,13 +178,16 @@ func main() {
 	globalCtx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	isProduction := os.Getenv("ENV") == "production"
+
 	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
+		slog.Bool("gracefulShutdown", isProduction),
 	)
 
-	_, _ = tracer.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it’s long-lived client)
+	_, _ = tracer.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it's long-lived client)
 
 	notify := make(chan struct{}, 1)
 
@@ -191,5 +195,19 @@ func main() {
 	go dnsWatcher(globalCtx, cfg.ExternalGRPC, notify)
 
 	// Start gRPC worker loop
-	grpcWorker(globalCtx, notify)
+	go func() {
+		grpcWorker(globalCtx, notify)
+	}()
+
+	// Wait for shutdown signal
+	<-globalCtx.Done()
+
+	if !isProduction {
+		logger.Info(globalCtx, "Received shutdown signal, exiting immediately")
+		os.Exit(0)
+	} else {
+		logger.Info(globalCtx, "Shutting down gRPC client")
+		// Let goroutines finish naturally via context cancellation
+		time.Sleep(100 * time.Millisecond) // Brief wait for cleanup
+	}
 }

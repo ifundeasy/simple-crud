@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math/rand"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -26,10 +28,13 @@ func main() {
 	logger.Instance()
 	cfg := config.Instance()
 
+	isProduction := os.Getenv("ENV") == "production"
+
 	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
+		slog.Bool("gracefulShutdown", isProduction),
 	)
 
 	shutdown, _ := tracer.Instance(globalCtx)
@@ -40,8 +45,13 @@ func main() {
 	for {
 		select {
 		case <-globalCtx.Done():
-			logger.Info(globalCtx, "Shutting down HTTP client")
-			return
+			if !isProduction {
+				logger.Info(globalCtx, "Received shutdown signal, exiting immediately")
+				os.Exit(0)
+			} else {
+				logger.Info(globalCtx, "Shutting down HTTP client")
+				return
+			}
 
 		default:
 			ctx, cancel := context.WithTimeout(globalCtx, 2*time.Second)
@@ -50,8 +60,7 @@ func main() {
 			cfg := config.Instance()
 			httpClient := client.NewHTTPClient(cfg.ExternalHTTP, 3*time.Second)
 
-			// paths := []string{"/external", "/products", "/just-not-found"}
-			paths := []string{"/external"}
+			paths := []string{"/external", "/products", "/just-not-found"}
 			path := paths[rand.Intn(len(paths))]
 			resp, err := httpClient.GetWithResponse(path, client.RequestOptions{
 				Context: ctx,
@@ -63,7 +72,12 @@ func main() {
 				continue
 			}
 
-			logger.Info(ctx, "Fetched products", slog.Int("count", len(resp.RawBody)))
+			var products []interface{}
+			if err := json.Unmarshal(resp.RawBody, &products); err == nil {
+				logger.Info(ctx, "Fetched products", slog.Int("count", len(products)))
+			} else {
+				logger.Error(ctx, "Failed to parse JSON response", slog.String("error", err.Error()))
+			}
 			span.End()
 			sleep(cfg)
 		}
@@ -71,7 +85,6 @@ func main() {
 }
 
 func sleep(cfg *config.Config) {
-	// delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
-	delay := time.Duration(int(cfg.ClientMaxSleepMs)+1) * time.Millisecond
+	delay := time.Duration(rand.Intn(int(cfg.ClientMaxSleepMs))+1) * time.Millisecond
 	time.Sleep(delay)
 }

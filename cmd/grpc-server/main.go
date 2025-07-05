@@ -32,10 +32,13 @@ func main() {
 	logger.Instance()
 	cfg := config.Instance()
 
+	isProduction := os.Getenv("ENV") == "production"
+
 	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
+		slog.Bool("gracefulShutdown", isProduction),
 	)
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
@@ -79,8 +82,13 @@ func main() {
 
 	// Wait for shutdown signal
 	<-globalCtx.Done()
-	logger.Info(globalCtx, "Shutting down gRPC server")
 
-	grpcServer.GracefulStop()
-	logger.Info(globalCtx, "gRPC server exited cleanly")
+	if !isProduction {
+		logger.Info(globalCtx, "Received shutdown signal, exiting immediately")
+		os.Exit(0)
+	} else {
+		logger.Info(globalCtx, "Shutting down gRPC server")
+		grpcServer.GracefulStop()
+		logger.Info(globalCtx, "gRPC server exited cleanly")
+	}
 }

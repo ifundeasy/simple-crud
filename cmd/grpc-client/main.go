@@ -32,12 +32,15 @@ func main() {
 	cfg := config.Instance()
 	tracer := otel.Tracer("backend-grpc-client")
 
+	isProduction := os.Getenv("ENV") == "production"
+
 	logger.Info(
 		globalCtx,
 		cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
+		slog.Bool("gracefulShutdown", isProduction),
 	)
 
 	conn, err := grpc.NewClient(
@@ -72,8 +75,13 @@ func main() {
 	for {
 		select {
 		case <-globalCtx.Done():
-			logger.Info(globalCtx, "Shutting down gRPC client")
-			return
+			if !isProduction {
+				logger.Info(globalCtx, "Received shutdown signal, exiting immediately")
+				os.Exit(0)
+			} else {
+				logger.Info(globalCtx, "Shutting down gRPC client")
+				return
+			}
 
 		default:
 			// Add span tracing

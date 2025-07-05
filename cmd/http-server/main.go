@@ -30,10 +30,14 @@ func main() {
 	logger.Instance()
 	cfg := config.Instance()
 
+	// Check if ENV is production to enable graceful shutdown
+	isProduction := os.Getenv("ENV") == "production"
+
 	logger.Info(globalCtx, cfg.AppName,
 		slog.String("version", version.Version),
 		slog.String("commit", version.Commit),
 		slog.String("buildTime", version.BuildTime),
+		slog.Bool("gracefulShutdown", !isProduction),
 	)
 
 	// Initialize telemetry
@@ -123,14 +127,24 @@ func main() {
 		}
 	}()
 
-	<-globalCtx.Done() // wait for interrupt
-	logger.Info(globalCtx, "Shutting down server")
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error(globalCtx, "Graceful shutdown failed", slog.String("error", err.Error()))
+	// Handle shutdown based on environment
+	if !isProduction {
+		// For local development: skip graceful shutdown
+		logger.Info(globalCtx, "Running in local mode - graceful shutdown disabled")
+		<-globalCtx.Done() // wait for interrupt
+		logger.Info(globalCtx, "Received shutdown signal, exiting immediately")
+		os.Exit(0)
 	} else {
-		logger.Info(globalCtx, "Server exited properly")
+		// For production/staging: use graceful shutdown
+		<-globalCtx.Done() // wait for interrupt
+		logger.Info(globalCtx, "Shutting down server")
+
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error(globalCtx, "Graceful shutdown failed", slog.String("error", err.Error()))
+		} else {
+			logger.Info(globalCtx, "Server exited properly")
+		}
 	}
 }
