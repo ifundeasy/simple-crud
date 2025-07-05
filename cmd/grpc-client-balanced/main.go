@@ -122,7 +122,7 @@ func dnsWatcher(globalCtx context.Context, host string, notify chan struct{}) {
 
 // grpcWorker performs gRPC request loop and reconnects whenever DNS watcher sends signal.
 func grpcWorker(globalCtx context.Context, notify chan struct{}) {
-	tracer := otel.Tracer("grpc-client")
+	tracer := otel.Tracer("backend-grpc-client")
 	defer disconnect(globalCtx)
 	err := connect(globalCtx, cfg.ExternalGRPC)
 	if err != nil {
@@ -141,7 +141,7 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 		default:
 			if client != nil {
 				ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
-				ctx, span := tracer.Start(ctx, "grpc-request")
+				ctx, span := tracer.Start(ctx, "backend-grpc-request")
 				var trailer metadata.MD
 				resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
 				cancel()

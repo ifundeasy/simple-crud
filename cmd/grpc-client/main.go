@@ -30,7 +30,7 @@ func main() {
 
 	logger.Instance()
 	cfg := config.Instance()
-	tracer := otel.Tracer("grpc-client")
+	tracer := otel.Tracer("backend-grpc-client")
 
 	logger.Info(
 		globalCtx,
@@ -78,7 +78,7 @@ func main() {
 		default:
 			// Add span tracing
 			ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
-			ctx, span := tracer.Start(ctx, "grpc-request")
+			ctx, span := tracer.Start(ctx, "backend-grpc-request")
 			var trailer metadata.MD
 
 			resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))

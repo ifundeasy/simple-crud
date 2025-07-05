@@ -1,15 +1,17 @@
 package http
 
 import (
-	"io"
 	"net/http"
+	"time"
 
 	"log/slog"
 
+	"simple-crud/internal/client"
 	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type ExternalHandler struct {
@@ -25,32 +27,28 @@ func NewExternalHandler(url string) *ExternalHandler {
 }
 
 func (h *ExternalHandler) Fetch(w http.ResponseWriter, r *http.Request) {
-	ctx, span := ExternalHandlerTracer.Start(r.Context(), "ExternalHandler.Fetch")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := ExternalHandlerTracer.Start(propCtx, "ExternalHandler.Fetch")
 	defer span.End()
-	logger.Info(ctx, "Handler")
+	logger.Info(ctx, "Handler called")
 
+	// Call external HTTP
 	cfg := config.Instance()
-	resp, err := http.Get(cfg.ExternalHTTP + "/products")
-	if err != nil {
-		logger.Error(ctx, "Failed to call external service", slog.String("error", err.Error()))
-		http.Error(w, "External call failed", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
+	httpClient := client.NewHTTPClient(cfg.ExternalHTTP, 3*time.Second)
 
-	body, err := io.ReadAll(resp.Body)
+	resp, err := httpClient.GetWithResponse("/products", client.RequestOptions{
+		Context: ctx,
+	})
 	if err != nil {
-		logger.Error(ctx, "Failed to read response", slog.String("error", err.Error()))
-		http.Error(w, "Error reading external response", http.StatusInternalServerError)
 		return
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error(ctx, "External service returned non-200", slog.Int("status_code", resp.StatusCode))
-		http.Error(w, "External error", resp.StatusCode)
-		return
-	}
+	logger.Info(ctx, "Fetched products", slog.Int("count", len(resp.RawBody)))
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(body)
+	w.Write(resp.RawBody)
 }

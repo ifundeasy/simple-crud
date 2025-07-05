@@ -8,6 +8,7 @@ import (
 	"simple-crud/internal/service"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type HealthHandler struct {
@@ -23,11 +24,16 @@ func NewHealthHandler(service *service.HealthService) *HealthHandler {
 }
 
 func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpHealthHandlerTracer.Start(r.Context(), "HttpHealthHandler.GetAll")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpHealthHandlerTracer.Start(propCtx, "HttpHealthHandler.Check")
 	defer span.End()
 	logger.Info(ctx, "HttpHealthHandler")
 
-	status := h.service.Check(r.Context())
+	status := h.service.Check(propCtx)
 
 	overall := "UP"
 	if status.Mongo == "DOWN" {

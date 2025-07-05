@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var tracer = otel.Tracer("HttpMiddleware")
@@ -23,7 +24,11 @@ var tracer = otel.Tracer("HttpMiddleware")
 func TraceMiddleware(globalCtx context.Context) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx, span := tracer.Start(r.Context(), r.Method+" "+r.URL.Path)
+			// Extract trace context from incoming request headers
+			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+
+			// Start span with the extracted context (will continue existing trace if present)
+			ctx, span := tracer.Start(ctx, r.Method+" "+r.URL.Path)
 			defer func() {
 				if rec := recover(); rec != nil {
 					span.RecordError(errFromRecover(rec))

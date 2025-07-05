@@ -9,6 +9,7 @@ import (
 	"simple-crud/internal/service"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type ProductHandler struct {
@@ -24,11 +25,16 @@ func NewProductHandler(service *service.ProductService) *ProductHandler {
 }
 
 func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetAll")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpProductHandlerTracer.Start(propCtx, "HttpProductHandler.GetAll")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
 
-	products, err := h.service.GetAll(r.Context())
+	products, err := h.service.GetAll(ctx)
 	if err != nil {
 		http.Error(w, "Failed to fetch products", http.StatusInternalServerError)
 		return
@@ -37,7 +43,12 @@ func (h *ProductHandler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.GetByID")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpProductHandlerTracer.Start(propCtx, "HttpProductHandler.GetByID")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
 
@@ -46,7 +57,7 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ID is required", http.StatusBadRequest)
 		return
 	}
-	product, err := h.service.GetByID(r.Context(), id)
+	product, err := h.service.GetByID(ctx, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -55,7 +66,12 @@ func (h *ProductHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Create")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpProductHandlerTracer.Start(propCtx, "HttpProductHandler.Create")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
 
@@ -75,7 +91,12 @@ func (h *ProductHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Update")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpProductHandlerTracer.Start(propCtx, "HttpProductHandler.Update")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
 
@@ -91,7 +112,7 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Update(r.Context(), id, &p); err != nil {
+	if err := h.service.Update(ctx, id, &p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -99,7 +120,12 @@ func (h *ProductHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	ctx, span := HttpProductHandlerTracer.Start(r.Context(), "HttpProductHandler.Delete")
+	parentCtx := r.Context()
+
+	// Start span with extracted context
+	// Extract context from incoming headers (traceparent, etc.)
+	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
+	ctx, span := HttpProductHandlerTracer.Start(propCtx, "HttpProductHandler.Delete")
 	defer span.End()
 	logger.Info(ctx, "HttpProductHandler")
 
@@ -109,7 +135,7 @@ func (h *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Delete(r.Context(), id); err != nil {
+	if err := h.service.Delete(ctx, id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
