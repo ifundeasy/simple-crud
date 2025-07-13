@@ -7,9 +7,9 @@ curl --location 'http://localhost:3000'
 
 create product
 ```bash
-curl --location 'http://localhost:3000/product' --header 'Content-Type: application/json' \
+curl --location 'http://localhost:3001/product' --header 'Content-Type: application/json' \
 --data '{
-    "name": "sirop tjampolay",
+    "name": "sirop marijan",
     "price": 1000,
     "stock": 100
 }'

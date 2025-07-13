@@ -27,7 +27,7 @@ func NewProductRepository(db *mongo.Database) *ProductRepository {
 func (r *ProductRepository) Insert(ctx context.Context, product *model.Product) error {
 	ctx, span := ProductRepositoryTracer.Start(ctx, "ProductRepository.Insert")
 	defer span.End()
-	logger.Info(ctx, "Repository")
+	logger.Info(ctx, "ProductRepository.Insert")
 
 	product.ID = primitive.NewObjectID()
 	_, err := r.collection.InsertOne(ctx, product)
@@ -37,7 +37,7 @@ func (r *ProductRepository) Insert(ctx context.Context, product *model.Product) 
 func (r *ProductRepository) FindAll(ctx context.Context) ([]model.Product, error) {
 	ctx, span := ProductRepositoryTracer.Start(ctx, "ProductRepository.FindAll")
 	defer span.End()
-	logger.Info(ctx, "Repository")
+	logger.Info(ctx, "ProductRepository.FindAll")
 
 	cursor, err := r.collection.Find(ctx, bson.M{})
 	if err != nil {
@@ -59,7 +59,7 @@ func (r *ProductRepository) FindAll(ctx context.Context) ([]model.Product, error
 func (r *ProductRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*model.Product, error) {
 	ctx, span := ProductRepositoryTracer.Start(ctx, "ProductRepository.FindByID")
 	defer span.End()
-	logger.Info(ctx, "Repository")
+	logger.Info(ctx, "ProductRepository.FindByID")
 
 	var product model.Product
 	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&product)
@@ -72,7 +72,7 @@ func (r *ProductRepository) FindByID(ctx context.Context, id primitive.ObjectID)
 func (r *ProductRepository) Update(ctx context.Context, id primitive.ObjectID, updated *model.Product) error {
 	ctx, span := ProductRepositoryTracer.Start(ctx, "ProductRepository.Update")
 	defer span.End()
-	logger.Info(ctx, "Repository")
+	logger.Info(ctx, "ProductRepository.Update")
 
 	update := bson.M{
 		"$set": bson.M{
@@ -88,7 +88,7 @@ func (r *ProductRepository) Update(ctx context.Context, id primitive.ObjectID, u
 func (r *ProductRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
 	ctx, span := ProductRepositoryTracer.Start(ctx, "ProductRepository.Delete")
 	defer span.End()
-	logger.Info(ctx, "Repository")
+	logger.Info(ctx, "ProductRepository.Delete")
 
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err

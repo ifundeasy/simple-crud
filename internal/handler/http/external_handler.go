@@ -32,9 +32,9 @@ func (h *ExternalHandler) Fetch(w http.ResponseWriter, r *http.Request) {
 	// Start span with extracted context
 	// Extract context from incoming headers (traceparent, etc.)
 	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
-	ctx, span := ExternalHandlerTracer.Start(propCtx, "ExternalHandler.Fetch")
+	ctx, span := ExternalHandlerTracer.Start(propCtx, "HttpExternalHandler.Fetch")
 	defer span.End()
-	logger.Info(ctx, "Handler called")
+	logger.Info(ctx, "HttpExternalHandler.Fetch")
 
 	// Call external HTTP
 	cfg := config.Instance()
@@ -50,5 +50,6 @@ func (h *ExternalHandler) Fetch(w http.ResponseWriter, r *http.Request) {
 	logger.Info(ctx, "Fetched products", slog.Int("count", len(resp.RawBody)))
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	w.Write(resp.RawBody)
 }

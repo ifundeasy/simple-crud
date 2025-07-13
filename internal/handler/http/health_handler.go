@@ -31,7 +31,7 @@ func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	propCtx := otel.GetTextMapPropagator().Extract(parentCtx, propagation.HeaderCarrier(r.Header))
 	ctx, span := HttpHealthHandlerTracer.Start(propCtx, "HttpHealthHandler.Check")
 	defer span.End()
-	logger.Info(ctx, "HttpHealthHandler")
+	logger.Info(ctx, "HttpHealthHandler.Check")
 
 	status := h.service.Check(propCtx)
 
@@ -49,5 +49,6 @@ func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }

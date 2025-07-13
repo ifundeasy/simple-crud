@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"simple-crud/internal/logger"
 	"strings"
 	"time"
@@ -73,7 +75,11 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 	// Build URL with query parameters
 	fullURL, err := c.buildURL(opts.URL, opts.QueryParams)
 	if err != nil {
-		logger.Error(opts.Context, "Failed to build URL", slog.Any("error", err))
+		logger.Error(opts.Context, "Failed to build URL",
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		return fmt.Errorf("Failed to build URL: %w", err)
 	}
 
@@ -82,7 +88,11 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 	if opts.Body != nil {
 		bodyBytes, err := c.encodeBody(opts.Body)
 		if err != nil {
-			logger.Error(opts.Context, "Failed to encode body", slog.Any("error", err))
+			logger.Error(opts.Context, "Failed to encode body",
+				slog.String("exception.message", err.Error()),
+				slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+				slog.String("exception.stacktrace", string(debug.Stack())),
+			)
 			return fmt.Errorf("Failed to encode body: %w", err)
 		}
 		bodyReader = bytes.NewReader(bodyBytes)
@@ -98,7 +108,11 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 
 	req, err := http.NewRequestWithContext(ctx, opts.Method, fullURL, bodyReader)
 	if err != nil {
-		logger.Error(opts.Context, "Failed to create request", slog.Any("error", err))
+		logger.Error(opts.Context, "Failed to create request",
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		return fmt.Errorf("Failed to create request: %w", err)
 	}
 
@@ -110,17 +124,11 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 	c.setHeaders(req, map[string]string{
 		"X-Trace-ID": traceID,
 	})
-	spanID := span.SpanContext().SpanID().String()
 
-	logger.Info(ctx, "HttpClient request",
-		slog.Any("headers", c.headers),
-		slog.String("method", req.Method),
-		slog.String("url", req.URL.String()),
-		slog.String("trace_id", traceID),
-		slog.String("span_id", spanID),
-	)
+	attrs := logger.LogHTTPRequest(ctx, req, "outgoing::request")
+	logger.Info(ctx, "HTTP", attrs...)
 
-	// Set headers
+	// Set user headers
 	c.setHeaders(req, opts.Headers)
 
 	// Set timeout if specified
@@ -132,19 +140,40 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 	}
 
 	// Execute request
+	start := time.Now()
 	resp, err := c.client.Do(req)
 	if err != nil {
-		logger.Error(opts.Context, "Failed to execute request", slog.String("error", err.Error()))
+		logger.Error(opts.Context, "Failed to execute request",
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		return fmt.Errorf("Failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
+	duration := time.Since(start)
 
 	// Read response body
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error(opts.Context, "Failed to read response body", slog.String("error", err.Error()))
+		logger.Error(opts.Context, "Failed to read response body",
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		return fmt.Errorf("Failed to read response body: %w", err)
 	}
+
+	attrs = logger.LogHTTPResponse(
+		ctx,
+		req,
+		resp.Header,
+		resp.StatusCode,
+		bytes.NewReader(rawBody),
+		duration.Milliseconds(),
+		"outgoing::response",
+	)
+	logger.Info(ctx, "HTTP", attrs...)
 
 	// Parse response based on result type
 	if result != nil {
@@ -156,7 +185,11 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 				if err := json.Unmarshal(rawBody, &data); err != nil {
 					// If JSON parsing fails, try to assign raw body
 					if err := c.assignRawBody(opts, &data, rawBody); err != nil {
-						logger.Error(opts.Context, "Failed to parse response", slog.Any("error", err))
+						logger.Error(opts.Context, "Failed to parse response",
+							slog.String("exception.message", err.Error()),
+							slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+							slog.String("exception.stacktrace", string(debug.Stack())),
+						)
 						return fmt.Errorf("failed to parse response: %w", err)
 					}
 				}
@@ -166,14 +199,17 @@ func (c *HTTPClient) Do(opts RequestOptions, result interface{}) error {
 			respPtr.Headers = resp.Header
 			respPtr.RawBody = rawBody
 
-			// logger.Info(ctx, "HttpClient request", slog.Any("data", data))
 		} else {
 			// Handle direct type
 			if len(rawBody) > 0 {
 				if err := json.Unmarshal(rawBody, result); err != nil {
 					// If JSON parsing fails, try to assign raw body
 					if err := c.assignRawBody(opts, result, rawBody); err != nil {
-						logger.Error(opts.Context, "Failed to parse response", slog.Any("error", err))
+						logger.Error(opts.Context, "Failed to parse response",
+							slog.String("exception.message", err.Error()),
+							slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+							slog.String("exception.stacktrace", string(debug.Stack())),
+						)
 						return fmt.Errorf("failed to parse response: %w", err)
 					}
 				}

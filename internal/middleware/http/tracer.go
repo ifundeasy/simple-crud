@@ -3,20 +3,49 @@ package middleware_http
 import (
 	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"time"
 
-	"log/slog"
 	"simple-crud/internal/logger"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 )
 
 var tracer = otel.Tracer("HttpMiddleware")
+
+type HeaderWrapper struct {
+	http.Header
+}
+
+// ResponseWriter captures status, size **and body**.
+type ResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	size       int64
+	buf        bytes.Buffer // 🆕 holds the response body (up to MaxBodyLogged)
+}
+
+func (rw *ResponseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *ResponseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.size += int64(n)
+
+	if rw.buf.Len() < logger.MaxBodyLogged {
+		// Copy into buffer, but never exceed MaxBodyLogged
+		toCopy := logger.MaxBodyLogged - rw.buf.Len()
+		if len(b) < toCopy {
+			toCopy = len(b)
+		}
+		rw.buf.Write(b[:toCopy])
+	}
+	return n, err
+}
 
 // TraceMiddleware wraps HTTP handlers with OpenTelemetry tracing.
 // It captures request & response metadata, injects trace ID into response headers,
@@ -38,39 +67,22 @@ func TraceMiddleware(globalCtx context.Context) func(http.Handler) http.Handler 
 				span.End()
 			}()
 
-			r = r.WithContext(ctx)
-
-			// Read request body (safe for re-read downstream)
-			var body []byte
-			if r.Body != nil {
-				body, _ = io.ReadAll(r.Body)
-				r.Body = io.NopCloser(bytes.NewBuffer(body))
-			}
+			attrs := logger.LogHTTPRequest(ctx, r, "incoming::request")
+			logger.Info(ctx, "HTTP", attrs...)
 
 			// Wrap response writer to capture status code and size
-			rw := &responseWriter{ResponseWriter: w, statusCode: 200}
+			rw := &ResponseWriter{ResponseWriter: w, statusCode: 200}
 			start := time.Now()
 
 			// Extract TraceID early
 			traceID := span.SpanContext().TraceID().String()
+
 			// Inject trace ID into response header BEFORE handler runs
 			rw.Header().Set("X-Trace-ID", traceID)
+			otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(r.Header))
 
 			// Call actual handler
 			next.ServeHTTP(rw, r)
-
-			duration := time.Since(start)
-
-			// Enrich span attributes after handler completes
-			span.SetAttributes(
-				attribute.String("http.method", r.Method),
-				attribute.String("http.target", r.URL.Path),
-				attribute.String("http.query", r.URL.RawQuery),
-				attribute.String("http.remote_addr", r.RemoteAddr),
-				attribute.Int("http.status_code", rw.statusCode),
-				attribute.Int64("http.response_content_length", rw.size),
-				attribute.Int64("http.duration_ms", duration.Milliseconds()),
-			)
 
 			// Set OpenTelemetry span status
 			if rw.statusCode >= 500 {
@@ -81,17 +93,10 @@ func TraceMiddleware(globalCtx context.Context) func(http.Handler) http.Handler 
 				span.SetStatus(codes.Ok, "")
 			}
 
-			// Inject trace ID into application logs
-			logger.Info(ctx, "HttpMiddleware",
-				slog.String("trace_id", traceID),
-				slog.String("http.method", r.Method),
-				slog.String("http.path", r.URL.Path),
-				slog.String("http.query", r.URL.RawQuery),
-				slog.String("http.remote", r.RemoteAddr),
-				slog.String("http.body", string(body)),
-				slog.Int("http.status", rw.statusCode),
-				slog.Int64("duration_ms", duration.Milliseconds()),
-			)
+			duration := time.Since(start)
+
+			attrs = logger.LogHTTPResponse(ctx, r, rw.Header(), rw.statusCode, &rw.buf, duration.Milliseconds(), "incoming::response")
+			logger.Info(ctx, "HTTP", attrs...)
 		})
 	}
 }

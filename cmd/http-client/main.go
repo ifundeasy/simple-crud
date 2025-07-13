@@ -74,9 +74,11 @@ func main() {
 
 			var products []interface{}
 			if err := json.Unmarshal(resp.RawBody, &products); err == nil {
-				logger.Info(ctx, "Fetched products", slog.Int("count", len(products)))
-			} else {
-				logger.Error(ctx, "Failed to parse JSON response", slog.String("error", err.Error()))
+				logger.Info(
+					ctx,
+					"Fetched products",
+					slog.Int("count", len(products)),
+				)
 			}
 			span.End()
 			sleep(cfg)

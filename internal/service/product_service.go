@@ -3,12 +3,10 @@ package service
 import (
 	"context"
 	"errors"
-	"log/slog"
 
 	"simple-crud/internal/logger"
 	"simple-crud/internal/model"
 	"simple-crud/internal/repository"
-	"simple-crud/internal/utils"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.opentelemetry.io/otel"
@@ -27,7 +25,7 @@ func NewProductService(repo *repository.ProductRepository) *ProductService {
 func (s *ProductService) Create(ctx context.Context, p *model.Product) (*model.Product, error) {
 	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Create")
 	defer span.End()
-	logger.Info(ctx, "Service", slog.String("payload", utils.ToJSONString(p)))
+	logger.Info(ctx, "ProductService.Create")
 
 	if p.Name == "" || p.Price <= 0 || p.Stock < 0 {
 		return nil, errors.New("invalid product data")
@@ -39,7 +37,7 @@ func (s *ProductService) Create(ctx context.Context, p *model.Product) (*model.P
 func (s *ProductService) GetAll(ctx context.Context) ([]model.Product, error) {
 	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.GetAll")
 	defer span.End()
-	logger.Info(ctx, "Service")
+	logger.Info(ctx, "ProductService.GetAll")
 
 	return s.repo.FindAll(ctx)
 }
@@ -47,7 +45,7 @@ func (s *ProductService) GetAll(ctx context.Context) ([]model.Product, error) {
 func (s *ProductService) GetByID(ctx context.Context, id string) (*model.Product, error) {
 	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.GetByID")
 	defer span.End()
-	logger.Info(ctx, "Service", slog.String("filter", id))
+	logger.Info(ctx, "ProductService.GetByID")
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -59,12 +57,7 @@ func (s *ProductService) GetByID(ctx context.Context, id string) (*model.Product
 func (s *ProductService) Update(ctx context.Context, id string, p *model.Product) error {
 	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Update")
 	defer span.End()
-	logger.Info(
-		ctx,
-		"Service",
-		slog.String("filter", id),
-		slog.String("payload", utils.ToJSONString(p)),
-	)
+	logger.Info(ctx, "ProductService.Update")
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
@@ -76,7 +69,7 @@ func (s *ProductService) Update(ctx context.Context, id string, p *model.Product
 func (s *ProductService) Delete(ctx context.Context, id string) error {
 	ctx, span := ProductServiceTracer.Start(ctx, "ProductService.Delete")
 	defer span.End()
-	logger.Info(ctx, "Service", slog.String("filter", id))
+	logger.Info(ctx, "ProductService.Delete")
 
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {

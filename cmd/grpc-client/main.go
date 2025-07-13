@@ -17,6 +17,7 @@ import (
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/logger"
+	"simple-crud/internal/tracer"
 	"simple-crud/internal/version"
 
 	"go.opentelemetry.io/otel"
@@ -30,7 +31,6 @@ func main() {
 
 	logger.Instance()
 	cfg := config.Instance()
-	tracer := otel.Tracer("backend-grpc-client")
 
 	isProduction := os.Getenv("ENV") == "production"
 
@@ -42,6 +42,11 @@ func main() {
 		slog.String("buildTime", version.BuildTime),
 		slog.Bool("gracefulShutdown", isProduction),
 	)
+
+	shutdown, _ := tracer.Instance(globalCtx)
+	defer shutdown()
+
+	GrpcRequestorTracer := otel.Tracer("GrpcRequestorMain")
 
 	conn, err := grpc.NewClient(
 		cfg.ExternalGRPC,
@@ -86,21 +91,30 @@ func main() {
 		default:
 			// Add span tracing
 			ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
-			ctx, span := tracer.Start(ctx, "backend-grpc-request")
+			ctx, span := GrpcRequestorTracer.Start(ctx, "backend-grpc-request")
+
+			// Extract trace ID from span context
+			spanContext := span.SpanContext()
+			traceID := spanContext.TraceID().String()
+
+			// Create metadata with trace ID
+			md := metadata.Pairs("x-trace-id", traceID)
+			ctx = metadata.NewOutgoingContext(ctx, md)
+
 			var trailer metadata.MD
 
 			resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
 			cancel()
 			span.End()
 
-			// Extract trace-id from trailer
-			traceIDs := trailer.Get("x-trace-id")
-			var traceID string
-			if len(traceIDs) < 1 {
-				traceID = "empty"
-				logger.Warn(ctx, "No Trace ID received")
+			// Extract trace-id from trailer (for server response)
+			serverTraceIDs := trailer.Get("x-trace-id")
+			var serverTraceID string
+			if len(serverTraceIDs) < 1 {
+				serverTraceID = "empty"
+				logger.Warn(ctx, "No Trace ID received from server")
 			} else {
-				traceID = traceIDs[0]
+				serverTraceID = serverTraceIDs[0]
 			}
 
 			if err != nil {
@@ -108,15 +122,15 @@ func main() {
 					ctx,
 					"Error calling GetAll",
 					slog.String("error", err.Error()),
-					slog.String("trace_id", traceID),
+					slog.String("trailer_trace_id", serverTraceID),
 				)
 			} else {
 				logger.Info(
 					ctx,
-					"Received products",
-					slog.String("resolver", resp.Resolver),
-					slog.String("trace_id", traceID),
+					"Fetched products",
 					slog.Int("count", len(resp.GetProducts())),
+					slog.String("resolver", resp.Resolver),
+					slog.String("trailer_trace_id", serverTraceID),
 				)
 			}
 

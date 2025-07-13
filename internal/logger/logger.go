@@ -26,6 +26,12 @@ func Instance() *slog.Logger {
 	return instance
 }
 
+func Debug(ctx context.Context, msg string, attrs ...slog.Attr) {
+	enrichedAttrs := enrich(ctx, attrs...)
+	Instance().Debug(msg, attrsToArgs(enrichedAttrs)...)
+	sendLog("debug", msg, enrichedAttrs)
+}
+
 func Info(ctx context.Context, msg string, attrs ...slog.Attr) {
 	enrichedAttrs := enrich(ctx, attrs...)
 	Instance().Info(msg, attrsToArgs(enrichedAttrs)...)

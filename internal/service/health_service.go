@@ -28,9 +28,9 @@ func NewHealthService(mongo *mongo.Client) *HealthService {
 }
 
 func (s *HealthService) Check(ctx context.Context) HealthStatus {
-	ctx, span := HealthServiceTracer.Start(ctx, "HealthService.GetAll")
+	ctx, span := HealthServiceTracer.Start(ctx, "HealthService.Check")
 	defer span.End()
-	logger.Info(ctx, "Service")
+	logger.Info(ctx, "HealthService.Check")
 
 	status := HealthStatus{Mongo: "UP"}
 

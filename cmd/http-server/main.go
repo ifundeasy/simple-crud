@@ -21,6 +21,13 @@ import (
 	"simple-crud/internal/version"
 )
 
+func Chain(h http.Handler, middlewares ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		h = middlewares[i](h)
+	}
+	return h
+}
+
 func main() {
 	// Create cancellable context for graceful shutdown
 	bgCtx := context.Background()
@@ -111,7 +118,10 @@ func main() {
 	})
 
 	// HTTP server
-	wrappedMux := middleware_http.TraceMiddleware(globalCtx)(mux)
+	wrappedMux := Chain(
+		mux,
+		middleware_http.TraceMiddleware(globalCtx),
+	)
 	server := &http.Server{
 		Addr:         ":" + cfg.AppPort,
 		Handler:      wrappedMux,
