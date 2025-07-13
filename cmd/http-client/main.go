@@ -30,11 +30,14 @@ func main() {
 
 	isProduction := os.Getenv("ENV") == "production"
 
-	logger.Info(globalCtx, cfg.AppName,
-		slog.String("version", version.Version),
-		slog.String("commit", version.Commit),
-		slog.String("buildTime", version.BuildTime),
-		slog.Bool("gracefulShutdown", isProduction),
+	logger.Info(
+		globalCtx,
+		"Starting http client",
+		slog.String("service.name", cfg.AppName),
+		slog.String("service.version", version.Version),
+		slog.String("service.git_version", version.Commit),
+		slog.String("service.build_time", version.BuildTime),
+		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
 	shutdown, _ := tracer.Instance(globalCtx)

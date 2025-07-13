@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -36,11 +39,12 @@ func main() {
 
 	logger.Info(
 		globalCtx,
-		cfg.AppName,
-		slog.String("version", version.Version),
-		slog.String("commit", version.Commit),
-		slog.String("buildTime", version.BuildTime),
-		slog.Bool("gracefulShutdown", isProduction),
+		"Starting gRPC client",
+		slog.String("service.name", cfg.AppName),
+		slog.String("service.version", version.Version),
+		slog.String("service.git_version", version.Commit),
+		slog.String("service.build_time", version.BuildTime),
+		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
 	shutdown, _ := tracer.Instance(globalCtx)
@@ -54,11 +58,11 @@ func main() {
 		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 	)
 	if err != nil {
-		logger.Error(
-			globalCtx,
-			"Failed to connect to gRPC server",
-			slog.String("error", err.Error()),
-			slog.String("target", cfg.ExternalGRPC),
+		logger.Error(globalCtx, "Failed to connect to gRPC server",
+			slog.String("grpc.remote_addr", cfg.ExternalGRPC),
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
 		)
 		os.Exit(1)
 	}
@@ -72,9 +76,9 @@ func main() {
 	logger.Info(
 		globalCtx,
 		"gRPC client started",
-		slog.String("target", cfg.ExternalGRPC),
-		slog.Int("max_client_delay", int(cfg.ClientMaxSleepMs)),
-		slog.Int("dns_resolver_delay", int(cfg.DnsResolverDelayMs)),
+		slog.String("data.target", cfg.ExternalGRPC),
+		slog.Int("data.max_client_delay", int(cfg.ClientMaxSleepMs)),
+		slog.Int("data.dns_resolver_delay", int(cfg.DnsResolverDelayMs)),
 	)
 
 	for {
@@ -118,19 +122,19 @@ func main() {
 			}
 
 			if err != nil {
-				logger.Error(
-					ctx,
-					"Error calling GetAll",
-					slog.String("error", err.Error()),
-					slog.String("trailer_trace_id", serverTraceID),
+				logger.Error(ctx, "Error calling GetAll",
+					slog.String("grpc.trailers.trace_id", serverTraceID),
+					slog.String("exception.message", err.Error()),
+					slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+					slog.String("exception.stacktrace", string(debug.Stack())),
 				)
 			} else {
 				logger.Info(
 					ctx,
 					"Fetched products",
-					slog.Int("count", len(resp.GetProducts())),
-					slog.String("resolver", resp.Resolver),
-					slog.String("trailer_trace_id", serverTraceID),
+					slog.Int("data.count", len(resp.GetProducts())),
+					slog.String("grpc.resolver", resp.Resolver),
+					slog.String("grpc.trailers.trace_id", serverTraceID),
 				)
 			}
 

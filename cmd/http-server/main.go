@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -40,11 +43,14 @@ func main() {
 	// Check if ENV is production to enable graceful shutdown
 	isProduction := os.Getenv("ENV") == "production"
 
-	logger.Info(globalCtx, cfg.AppName,
-		slog.String("version", version.Version),
-		slog.String("commit", version.Commit),
-		slog.String("buildTime", version.BuildTime),
-		slog.Bool("gracefulShutdown", !isProduction),
+	logger.Info(
+		globalCtx,
+		"Starting http server",
+		slog.String("service.name", cfg.AppName),
+		slog.String("service.version", version.Version),
+		slog.String("service.git_version", version.Commit),
+		slog.String("service.build_time", version.BuildTime),
+		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
 	// Initialize telemetry
@@ -54,7 +60,11 @@ func main() {
 	// Connect to MongoDB
 	db, err := database.Instance(globalCtx, cfg.MongoURI, cfg.MongoDBName)
 	if err != nil {
-		logger.Error(globalCtx, "Failed to connect to MongoDB", slog.String("error", err.Error()))
+		logger.Error(globalCtx, "Failed to connect to MongoDB",
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		os.Exit(1)
 	}
 
@@ -130,9 +140,13 @@ func main() {
 	}
 
 	go func() {
-		logger.Info(globalCtx, "HTTP server running", slog.String("addr", server.Addr))
+		logger.Info(globalCtx, "HTTP server running", slog.String("data.addr", server.Addr))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error(globalCtx, "Server error", slog.String("error", err.Error()))
+			logger.Error(globalCtx, "Server error",
+				slog.String("exception.message", err.Error()),
+				slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+				slog.String("exception.stacktrace", string(debug.Stack())),
+			)
 			os.Exit(1)
 		}
 	}()
@@ -152,7 +166,11 @@ func main() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			logger.Error(globalCtx, "Graceful shutdown failed", slog.String("error", err.Error()))
+			logger.Error(globalCtx, "Graceful shutdown failed",
+				slog.String("exception.message", err.Error()),
+				slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+				slog.String("exception.stacktrace", string(debug.Stack())),
+			)
 		} else {
 			logger.Info(globalCtx, "Server exited properly")
 		}

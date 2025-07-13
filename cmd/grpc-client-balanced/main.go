@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand"
 	"net"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"syscall"
@@ -57,7 +60,12 @@ func connect(globalCtx context.Context, target string) error {
 		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
 	)
 	if err != nil {
-		logger.Error(globalCtx, "Failed to dial gRPC", slog.String("error", err.Error()))
+		logger.Error(globalCtx, "Failed to connect to gRPC server",
+			slog.String("grpc.remote_addr", cfg.ExternalGRPC),
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 		return err
 	}
 	client = pb.NewProductServiceClient(conn)
@@ -96,7 +104,12 @@ func dnsWatcher(globalCtx context.Context, host string, notify chan struct{}) {
 		addrs, err := resolvePods(cleanHost)
 		if err != nil {
 			// DNS lookup failed
-			logger.Error(globalCtx, "DNS lookup failed", slog.Any("host", cleanHost), slog.String("error", err.Error()))
+			logger.Error(globalCtx, "DNS lookup failed",
+				slog.String("exception.message", err.Error()),
+				slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+				slog.String("exception.stacktrace", string(debug.Stack())),
+				slog.Any("data", cleanHost),
+			)
 			consecutiveFail++
 
 			// Go's built-in net.LookupHost() does not implement any DNS retry, failover, or backoff strategy.
@@ -127,7 +140,12 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 	defer disconnect(globalCtx)
 	err := connect(globalCtx, cfg.ExternalGRPC)
 	if err != nil {
-		logger.Error(globalCtx, "Initial gRPC connection failed, will retry on next DNS change")
+		logger.Error(globalCtx, "Initial gRPC connection failed, will retry on next DNS change",
+			slog.String("grpc.remote_addr", cfg.ExternalGRPC),
+			slog.String("exception.message", err.Error()),
+			slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+			slog.String("exception.stacktrace", string(debug.Stack())),
+		)
 	}
 
 	for {
@@ -157,12 +175,17 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 				}
 
 				if err != nil {
-					logger.Error(ctx, "Error calling GetAll", slog.String("error", err.Error()), slog.String("trace_id", traceID))
+					logger.Error(ctx, "Error calling GetAll",
+						slog.String("exception.message", err.Error()),
+						slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
+						slog.String("exception.stacktrace", string(debug.Stack())),
+						slog.String("data.trace_id", traceID),
+					)
 				} else {
 					logger.Info(ctx, "Received products",
-						slog.String("resolver", resp.Resolver),
-						slog.String("trace_id", traceID),
-						slog.Int("count", len(resp.GetProducts())),
+						slog.String("data.resolver", resp.Resolver),
+						slog.Int("data.count", len(resp.GetProducts())),
+						slog.String("data.trace_id", traceID),
 					)
 				}
 			}
@@ -180,11 +203,13 @@ func main() {
 
 	isProduction := os.Getenv("ENV") == "production"
 
-	logger.Info(globalCtx, cfg.AppName,
-		slog.String("version", version.Version),
-		slog.String("commit", version.Commit),
-		slog.String("buildTime", version.BuildTime),
-		slog.Bool("gracefulShutdown", isProduction),
+	logger.Info(globalCtx,
+		"Starting gRPC client",
+		slog.String("service.name", cfg.AppName),
+		slog.String("service.version", version.Version),
+		slog.String("service.git_version", version.Commit),
+		slog.String("service.build_time", version.BuildTime),
+		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
 	_, _ = tracer.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it's long-lived client)

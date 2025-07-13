@@ -3,8 +3,11 @@ package config
 import (
 	"log/slog"
 	"os"
+	"reflect"
 	"strconv"
+	"strings"
 	"sync"
+	"unicode"
 
 	"simple-crud/internal/logger"
 
@@ -37,6 +40,55 @@ type SafeConfig struct {
 	RemoteLogHttpURI       string `json:"remote_log_http_uri"`
 	RemoteTraceRpcURI      string `json:"remote_trace_rpc_uri"`
 	RemoteProfilingHttpURI string `json:"remote_profiling_http_uri"`
+}
+
+func toSnake(s string) string {
+	var out strings.Builder
+	for i, r := range s {
+		if unicode.IsUpper(r) {
+			// Tambahkan underscore jika bukan huruf pertama dan sebelumnya bukan underscore
+			if i > 0 && s[i-1] != '_' {
+				out.WriteRune('_')
+			}
+			out.WriteRune(unicode.ToLower(r))
+		} else {
+			out.WriteRune(r)
+		}
+	}
+	return out.String()
+}
+
+// StructAttrs("data", cfg) ➜ []slog.Attr{ slog.String("data.app_port", "3001"), ... }
+func StructAttrs(prefix string, s any) []slog.Attr {
+	v := reflect.ValueOf(s)
+	if v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	t := v.Type()
+
+	attrs := make([]slog.Attr, 0, t.NumField())
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		key := prefix + "." + jsonKey(f) // mis. "data.app_port"
+
+		switch v.Field(i).Kind() {
+		case reflect.String:
+			attrs = append(attrs, slog.String(key, v.Field(i).String()))
+		case reflect.Int, reflect.Int64, reflect.Int32:
+			attrs = append(attrs, slog.Int64(key, v.Field(i).Int()))
+		default:
+			attrs = append(attrs, slog.Any(key, v.Field(i).Interface()))
+		}
+	}
+	return attrs
+}
+
+// Ambil nama tag `json:"..."` kalau ada; fallback ke camelCase->snake
+func jsonKey(f reflect.StructField) string {
+	if tag := f.Tag.Get("json"); tag != "" {
+		return strings.Split(tag, ",")[0]
+	}
+	return toSnake(f.Name) // implementasi toSnake sederhana
 }
 
 // ToSafeConfig mengkonversi Config ke SafeConfig untuk logging
@@ -137,7 +189,12 @@ func Instance() *Config {
 			os.Exit(1)
 		}
 
-		log.Info("Configuration loaded successfully", slog.Any("config", configInstance.ToSafeConfig()))
+		attrs := StructAttrs("data", configInstance.ToSafeConfig())
+		anyAttrs := make([]any, len(attrs))
+		for i, a := range attrs {
+			anyAttrs[i] = a
+		}
+		log.Info("Configuration loaded successfully", anyAttrs...)
 	})
 
 	return configInstance
