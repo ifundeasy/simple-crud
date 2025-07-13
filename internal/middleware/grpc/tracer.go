@@ -2,15 +2,16 @@ package middleware_grpc
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
+	"time"
 
 	"simple-crud/internal/logger"
+	"simple-crud/internal/telemetry"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
@@ -18,15 +19,20 @@ import (
 
 var tracer = otel.Tracer("GrpcMiddleware")
 
+// UnaryTracingInterceptor returns a gRPC unary server interceptor that
+// 1) propagates/creates spans,
+// 2) logs request & response via logger.LogGRPCRequest/Response,
+// 3) injects X-Trace-ID trailer, and
+// 4) handles panic recovery consistently.
 func UnaryTracingInterceptor() grpc.UnaryServerInterceptor {
-	return func(
-		ctx context.Context,
-		req any,
-		info *grpc.UnaryServerInfo,
-		handler grpc.UnaryHandler,
-	) (resp any, err error) {
-
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
+		// Extract existing tracing headers
+		md, _ := metadata.FromIncomingContext(ctx)
+		carrier := telemetry.MetadataTextMapCarrier(md)
+		ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
 		ctx, span := tracer.Start(ctx, info.FullMethod)
+		start := time.Now()
+
 		defer func() {
 			if rec := recover(); rec != nil {
 				span.RecordError(errFromRecover(rec))
@@ -36,56 +42,64 @@ func UnaryTracingInterceptor() grpc.UnaryServerInterceptor {
 			span.End()
 		}()
 
-		// Extract remote address
+		// Remote address (for logging only)
 		var remoteAddr string
 		if p, ok := peer.FromContext(ctx); ok {
 			remoteAddr = p.Addr.String()
 		}
 
-		// Extract request body
-		reqBody, _ := json.Marshal(req)
+		// ---- Log incoming request -------------------------------------
+		reqAttrs := logger.LogGRPCRequest(ctx, info.FullMethod, md, req, "incoming::request")
+		logger.Info(ctx, "GRPC", reqAttrs...)
 
-		// Extract trace ID for enrichment
-		traceID := span.SpanContext().TraceID().String()
-
-		// Inject trace ID into gRPC response trailer
-		grpc.SetTrailer(ctx, metadata.Pairs("x-trace-id", traceID))
-
-		// Call actual gRPC handler
+		// Call handler
 		resp, err = handler(ctx, req)
+		duration := time.Since(start)
 
-		// Set span attributes after handler completes
-		span.SetAttributes(
-			attribute.String("grpc.method", info.FullMethod),
-			attribute.String("grpc.remote_addr", remoteAddr),
-			attribute.String("grpc.trace_id", traceID),
-		)
-
+		// ---- Post‑processing span status ------------------------------
 		if err != nil {
 			span.RecordError(err)
-
-			st, ok := status.FromError(err)
-			if ok {
+			if st, ok := status.FromError(err); ok {
 				span.SetAttributes(attribute.String("grpc.code", st.Code().String()))
 			}
-
 			span.SetStatus(codes.Error, err.Error())
 		} else {
 			span.SetStatus(codes.Ok, "")
 		}
 
-		logger.Info(ctx, "GrpcMiddleware",
-			slog.String("trace_id", traceID),
-			slog.String("grpc.method", info.FullMethod),
-			slog.String("grpc.remote", remoteAddr),
-			slog.String("grpc.body", string(reqBody)),
+		// ---- Prepare trailer + trace ID -------------------------------
+		traceID := span.SpanContext().TraceID().String()
+		trailerMD := metadata.Pairs("x-trace-id", traceID)
+		grpc.SetTrailer(ctx, trailerMD)
+
+		span.SetAttributes(attribute.String("grpc.remote_addr", remoteAddr))
+
+		// ---- Log outgoing response ------------------------------------
+		code := grpcCodes.OK
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				code = st.Code()
+			}
+		}
+
+		respAttrs := logger.LogGRPCResponse(
+			ctx,
+			info.FullMethod,
+			trailerMD, // gunakan yang Anda buat tadi
+			code,
+			resp,
+			duration,
+			"incoming::response",
 		)
 
+		logger.Info(ctx, "GRPC", respAttrs...)
+
 		return resp, err
+
 	}
 }
 
-// Panic recovery (biar seragam sama HTTP middleware-mu)
+// Panic recovery (biar seragam sama HTTP middleware‑mu)
 func errFromRecover(rec interface{}) error {
 	if err, ok := rec.(error); ok {
 		return err
@@ -93,19 +107,13 @@ func errFromRecover(rec interface{}) error {
 	return &panicError{rec}
 }
 
-type panicError struct {
-	value interface{}
-}
+type panicError struct{ value interface{} }
 
-func (p *panicError) Error() string {
-	return "panic: " + stringify(p.value)
-}
+func (p *panicError) Error() string { return "panic: " + stringify(p.value) }
 
 func stringify(v interface{}) string {
-	switch v := v.(type) {
-	case string:
-		return v
-	default:
-		return "unknown panic"
+	if s, ok := v.(string); ok {
+		return s
 	}
+	return "unknown panic"
 }

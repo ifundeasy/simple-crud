@@ -13,7 +13,7 @@ import (
 	"simple-crud/internal/client"
 	"simple-crud/internal/config"
 	"simple-crud/internal/logger"
-	"simple-crud/internal/tracer"
+	"simple-crud/internal/telemetry"
 	"simple-crud/internal/version"
 
 	"go.opentelemetry.io/otel"
@@ -40,7 +40,7 @@ func main() {
 		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
-	shutdown, _ := tracer.Instance(globalCtx)
+	shutdown, _ := telemetry.Instance(globalCtx)
 	defer shutdown()
 
 	HttpRequestorTracer := otel.Tracer("HttpRequestorMain")

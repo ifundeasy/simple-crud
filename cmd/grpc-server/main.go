@@ -22,7 +22,7 @@ import (
 	middleware_grpc "simple-crud/internal/middleware/grpc"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
-	"simple-crud/internal/tracer"
+	"simple-crud/internal/telemetry"
 	"simple-crud/internal/version"
 )
 
@@ -48,7 +48,7 @@ func main() {
 	)
 
 	// Initialize telemetry (OpenTelemetry + Pyroscope)
-	shutdown, _ := tracer.Instance(globalCtx)
+	shutdown, _ := telemetry.Instance(globalCtx)
 	defer shutdown()
 
 	// Connect to MongoDB

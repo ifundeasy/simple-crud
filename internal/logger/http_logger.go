@@ -227,7 +227,7 @@ func LogHTTPResponse(ctx context.Context, req *http.Request, response_header htt
 		slog.String("http.method", req.Method),
 		slog.String("http.path", req.URL.Path),
 		slog.Int("http.status", response_status),
-		slog.Int64("duration_ms", duration),
+		slog.Int64("http.duration_ms", duration),
 	}
 
 	attrs = append(attrs, HeaderAttrs(response_header)...)

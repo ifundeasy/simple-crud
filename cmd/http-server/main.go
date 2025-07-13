@@ -20,7 +20,7 @@ import (
 	middleware_http "simple-crud/internal/middleware/http"
 	"simple-crud/internal/repository"
 	"simple-crud/internal/service"
-	"simple-crud/internal/tracer"
+	"simple-crud/internal/telemetry"
 	"simple-crud/internal/version"
 )
 
@@ -54,7 +54,7 @@ func main() {
 	)
 
 	// Initialize telemetry
-	shutdown, _ := tracer.Instance(globalCtx)
+	shutdown, _ := telemetry.Instance(globalCtx)
 	defer shutdown()
 
 	// Connect to MongoDB

@@ -24,7 +24,7 @@ import (
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
 	"simple-crud/internal/logger"
-	"simple-crud/internal/tracer"
+	"simple-crud/internal/telemetry"
 	"simple-crud/internal/version"
 
 	"go.opentelemetry.io/otel"
@@ -160,20 +160,33 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 		default:
 			if client != nil {
 				ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
+				defer cancel() // pastikan dilepas
+
+				// --- start parent span
 				ctx, span := tracer.Start(ctx, "backend-grpc-request")
+				defer span.End()
+
+				// --- inject trace context to metadata ─────────────────────────
+				md := metadata.New(nil)
+				otel.GetTextMapPropagator().Inject(ctx, telemetry.MetadataTextMapCarrier(md))
+				ctx = metadata.NewOutgoingContext(ctx, md)
+
+				fmt.Println(md.Get("traceparent")[0])
+				fmt.Println(span.SpanContext().TraceID().String())
+
+				// --- call GetAll RPC with metadata ────────────────────────────
 				var trailer metadata.MD
 				resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
-				cancel()
-				span.End()
 
-				traceIDs := trailer.Get("x-trace-id")
+				// If the server sets the x-trace-id in the trailer, we can log it
 				traceID := "empty"
-				if len(traceIDs) > 0 {
-					traceID = traceIDs[0]
+				if ids := trailer.Get("x-trace-id"); len(ids) > 0 {
+					traceID = ids[0]
 				} else {
 					logger.Warn(ctx, "No Trace ID received")
 				}
 
+				// --- logging hasil / error ────────────────────────────────────
 				if err != nil {
 					logger.Error(ctx, "Error calling GetAll",
 						slog.String("exception.message", err.Error()),
@@ -212,7 +225,7 @@ func main() {
 		slog.Bool("service.gracefull_shutdown", isProduction),
 	)
 
-	_, _ = tracer.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it's long-lived client)
+	_, _ = telemetry.Instance(globalCtx) // OpenTelemetry setup (no shutdown handling here since it's long-lived client)
 
 	notify := make(chan struct{}, 1)
 
