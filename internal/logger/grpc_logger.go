@@ -23,7 +23,7 @@ var allowedMD = map[string]bool{
 	"authorization": true, // will be redacted
 }
 
-// MetadataAttrs converts gRPC metadata into []slog.Attr (grpc.header.*).
+// MetadataAttrs converts gRPC metadata into []slog.Attr (grpc.trailers.*).
 func MetadataAttrs(md metadata.MD) []slog.Attr {
 	attrs := make([]slog.Attr, 0, len(md))
 	for k, vs := range md {
@@ -35,7 +35,7 @@ func MetadataAttrs(md metadata.MD) []slog.Attr {
 		if lower == "authorization" {
 			v = "***"
 		}
-		attrs = append(attrs, slog.String("grpc.header."+lower, v))
+		attrs = append(attrs, slog.String("grpc.trailers."+lower, v))
 	}
 	return attrs
 }
