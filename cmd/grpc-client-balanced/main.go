@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	grpcStatus "google.golang.org/grpc/status"
 
 	"simple-crud/internal/config"
 	pb "simple-crud/internal/handler/grpc/pb"
@@ -160,7 +162,7 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 		default:
 			if client != nil {
 				ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
-				defer cancel() // pastikan dilepas
+				defer cancel()
 
 				// --- start parent span
 				ctx, span := tracer.Start(ctx, "backend-grpc-request")
@@ -174,31 +176,55 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 				// fmt.Println(md.Get("traceparent")[0])
 				// fmt.Println(span.SpanContext().TraceID().String())
 
+				fullMethod := "/simplecrud.ProductService/GetAll"
+				reqMsg := &emptypb.Empty{}
+				attrs := logger.LogGRPCRequest(ctx, fullMethod, md, reqMsg, "outgoing::request")
+				logger.Info(ctx, "GRPC", attrs...)
+
 				// --- call GetAll RPC with metadata ────────────────────────────
+				start := time.Now()
 				var trailer metadata.MD
 				resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
+				cancel()
+				span.End()
+				duration := time.Since(start)
+
+				var grpcCode grpcCodes.Code
+				if err != nil {
+					if st, ok := grpcStatus.FromError(err); ok {
+						grpcCode = st.Code()
+					} else {
+						grpcCode = grpcCodes.Unknown // fallback: 2
+					}
+				} else {
+					grpcCode = grpcCodes.OK // success: 0
+				}
+				status := int32(grpcCode)
+
+				attrs = logger.LogGRPCResponse(ctx, fullMethod, trailer, status, resp, duration, "outgoing::response")
+				logger.Info(ctx, "GRPC", attrs...)
 
 				// If the server sets the x-trace-id in the trailer, we can log it
-				traceID := "empty"
+				serverTraceID := "empty"
 				if ids := trailer.Get("x-trace-id"); len(ids) > 0 {
-					traceID = ids[0]
+					serverTraceID = ids[0]
 				} else {
 					logger.Warn(ctx, "No Trace ID received")
 				}
 
-				// --- logging hasil / error ────────────────────────────────────
+				// --- logging response / error ────────────────────────────────────
 				if err != nil {
 					logger.Error(ctx, "Error calling GetAll",
 						slog.String("exception.message", err.Error()),
 						slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
 						slog.String("exception.stacktrace", string(debug.Stack())),
-						slog.String("data.trace_id", traceID),
+						slog.String("data.trace_id", serverTraceID),
 					)
 				} else {
 					logger.Info(ctx, "Received products",
 						slog.String("data.resolver", resp.Resolver),
 						slog.Int("data.count", len(resp.GetProducts())),
-						slog.String("data.trace_id", traceID),
+						slog.String("data.trace_id", serverTraceID),
 					)
 				}
 			}

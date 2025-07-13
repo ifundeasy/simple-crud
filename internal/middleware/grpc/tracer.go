@@ -14,7 +14,7 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
+	grpcStatus "google.golang.org/grpc/status"
 )
 
 var tracer = otel.Tracer("GrpcMiddleware")
@@ -59,8 +59,8 @@ func UnaryTracingInterceptor() grpc.UnaryServerInterceptor {
 		// ---- Post‑processing span status ------------------------------
 		if err != nil {
 			span.RecordError(err)
-			if st, ok := status.FromError(err); ok {
-				span.SetAttributes(attribute.String("grpc.code", st.Code().String()))
+			if st, ok := grpcStatus.FromError(err); ok {
+				span.SetAttributes(attribute.String("grpc.status", st.Code().String()))
 			}
 			span.SetStatus(codes.Error, err.Error())
 		} else {
@@ -75,18 +75,24 @@ func UnaryTracingInterceptor() grpc.UnaryServerInterceptor {
 		span.SetAttributes(attribute.String("grpc.remote_addr", remoteAddr))
 
 		// ---- Log outgoing response ------------------------------------
-		code := grpcCodes.OK
+		var grpcCode grpcCodes.Code
+
 		if err != nil {
-			if st, ok := status.FromError(err); ok {
-				code = st.Code()
+			if st, ok := grpcStatus.FromError(err); ok {
+				grpcCode = st.Code()
+			} else {
+				grpcCode = grpcCodes.Unknown // fallback: 2
 			}
+		} else {
+			grpcCode = grpcCodes.OK // success: 0
 		}
+		status := int32(grpcCode)
 
 		respAttrs := logger.LogGRPCResponse(
 			ctx,
 			info.FullMethod,
-			trailerMD, // gunakan yang Anda buat tadi
-			code,
+			trailerMD,
+			status,
 			resp,
 			duration,
 			"incoming::response",

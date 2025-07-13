@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -86,14 +85,14 @@ func LogGRPCRequest(ctx context.Context, fullMethod string, md metadata.MD, req 
 }
 
 // LogGRPCResponse builds slog attributes for a gRPC response.
-func LogGRPCResponse(ctx context.Context, fullMethod string, md metadata.MD, code codes.Code, resp interface{}, duration time.Duration, direction string) []slog.Attr {
+func LogGRPCResponse(ctx context.Context, fullMethod string, md metadata.MD, status int32, resp interface{}, duration time.Duration, direction string) []slog.Attr {
 	attrs := []slog.Attr{
 		slog.String("grpc.direction", direction),
 		slog.String("grpc.method", fullMethod),
-		slog.String("grpc.code", code.String()),
+		slog.String("grpc.status", fmt.Sprintf("%d", int32(status))),
 		slog.Int64("grpc.duration_ms", duration.Milliseconds()),
 	}
 	attrs = append(attrs, MetadataAttrs(md)...)
-	attrs = append(attrs, msgAttrs("grpc.response", resp)...)
+	attrs = append(attrs, msgAttrs("grpc.body", resp)...)
 	return attrs
 }

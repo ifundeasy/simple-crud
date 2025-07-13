@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"simple-crud/internal/config"
@@ -50,7 +52,7 @@ func main() {
 	shutdown, _ := telemetry.Instance(globalCtx)
 	defer shutdown()
 
-	GrpcRequestorTracer := otel.Tracer("GrpcRequestorMain")
+	tracer := otel.Tracer("backend-grpc-client")
 
 	conn, err := grpc.NewClient(
 		cfg.ExternalGRPC,
@@ -95,46 +97,69 @@ func main() {
 		default:
 			// Add span tracing
 			ctx, cancel := context.WithTimeout(globalCtx, 3*time.Second)
-			ctx, span := GrpcRequestorTracer.Start(ctx, "backend-grpc-request")
+			defer cancel()
 
-			// Extract trace ID from span context
-			spanContext := span.SpanContext()
-			traceID := spanContext.TraceID().String()
+			// --- start parent span
+			ctx, span := tracer.Start(ctx, "backend-grpc-request")
+			defer span.End()
 
-			// Create metadata with trace ID
-			md := metadata.Pairs("x-trace-id", traceID)
+			// --- inject trace context to metadata ─────────────────────────
+			md := metadata.New(nil)
+			otel.GetTextMapPropagator().Inject(ctx, telemetry.MetadataTextMapCarrier(md))
 			ctx = metadata.NewOutgoingContext(ctx, md)
 
-			var trailer metadata.MD
+			// fmt.Println(md.Get("traceparent")[0])
+			// fmt.Println(span.SpanContext().TraceID().String())
 
+			fullMethod := "/simplecrud.ProductService/GetAll"
+			reqMsg := &emptypb.Empty{}
+			attrs := logger.LogGRPCRequest(ctx, fullMethod, md, reqMsg, "outgoing::request")
+			logger.Info(ctx, "GRPC", attrs...)
+
+			// --- call GetAll RPC with metadata ────────────────────────────
+			start := time.Now()
+			var trailer metadata.MD
 			resp, err := client.GetAll(ctx, &emptypb.Empty{}, grpc.Trailer(&trailer))
 			cancel()
 			span.End()
+			duration := time.Since(start)
 
-			// Extract trace-id from trailer (for server response)
-			serverTraceIDs := trailer.Get("x-trace-id")
-			var serverTraceID string
-			if len(serverTraceIDs) < 1 {
-				serverTraceID = "empty"
-				logger.Warn(ctx, "No Trace ID received from server")
+			var grpcCode grpcCodes.Code
+			if err != nil {
+				if st, ok := grpcStatus.FromError(err); ok {
+					grpcCode = st.Code()
+				} else {
+					grpcCode = grpcCodes.Unknown // fallback: 2
+				}
 			} else {
-				serverTraceID = serverTraceIDs[0]
+				grpcCode = grpcCodes.OK // success: 0
+			}
+			status := int32(grpcCode)
+
+			attrs = logger.LogGRPCResponse(ctx, fullMethod, trailer, status, resp, duration, "outgoing::response")
+			logger.Info(ctx, "GRPC", attrs...)
+
+			// If the server sets the x-trace-id in the trailer, we can log it
+			serverTraceID := "empty"
+			if ids := trailer.Get("x-trace-id"); len(ids) > 0 {
+				serverTraceID = ids[0]
+			} else {
+				logger.Warn(ctx, "No Trace ID received")
 			}
 
+			// --- logging response / error ────────────────────────────────────
 			if err != nil {
 				logger.Error(ctx, "Error calling GetAll",
-					slog.String("grpc.trailers.trace_id", serverTraceID),
 					slog.String("exception.message", err.Error()),
 					slog.String("exception.type", fmt.Sprintf("%T", errors.Unwrap(err))),
 					slog.String("exception.stacktrace", string(debug.Stack())),
+					slog.String("data.trace_id", serverTraceID),
 				)
 			} else {
-				logger.Info(
-					ctx,
-					"Fetched products",
+				logger.Info(ctx, "Received products",
+					slog.String("data.resolver", resp.Resolver),
 					slog.Int("data.count", len(resp.GetProducts())),
-					slog.String("grpc.resolver", resp.Resolver),
-					slog.String("grpc.trailers.trace_id", serverTraceID),
+					slog.String("data.trace_id", serverTraceID),
 				)
 			}
 

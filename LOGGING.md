@@ -229,6 +229,7 @@ Fields:
 * `http.headers.$key` (Any): HTTP header values
 * `http.payload.$key` (Any): Payload fields
 * `http.status` (String): HTTP status code as string
+* `http.body.$key` (Any): Body fields
 * `http.duration` (String): Duration string (e.g. "120ms")
 
 ```json
@@ -242,6 +243,8 @@ Fields:
   "http.payload.username": "john",
   "http.payload.remember": true,
   "http.status": "200",
+  "http.body.0.name": "amir",
+  "http.body.0.age": 12,
   "http.duration": "125ms"
 }
 ```
@@ -261,7 +264,8 @@ Fields:
 * `grpc.trailers.$key` (Any): Response metadata (trailers)
 * > keep in mind trailers just like http headers
 * `grpc.payload.$key` (Any): Payload fields
-* `grpc.status` (String): Status (OK, UNAVAILABLE, etc.)
+* `grpc.status` (String): Status (0, 5, etc.)
+* `grpc.body.$key` (Any): Body fields
 * `grpc.duration` (String): Execution time (e.g. "80ms")
 
 ```json
@@ -272,10 +276,13 @@ Fields:
   "grpc.payload.username": "john",
   "grpc.payload.password": "*****",
   "grpc.trailers.content_type": "application/grpc",
-  "grpc.status": "OK",
+  "grpc.status": "0", // Numeral "0" is equal to "OK" code
+  "grpc.body.0.name": "amir",
+  "grpc.body.0.age": 12,
   "grpc.duration": "80ms"
 }
 ```
+More about [grpc status code](https://grpc.io/docs/guides/status-codes)
 
 
 ---
@@ -294,6 +301,7 @@ Fields:
 * `websocket.headers.$key` (Any): Headers from handshake
 * `websocket.payload.$key` (Any): Actual WS message
 * `websocket.status` (String): `ok`, `error`, `closed`, etc.
+* `websocket.body.$key` (Any): Body fields
 * `websocket.duration` (String): Response time
 
 ```json
@@ -306,6 +314,8 @@ Fields:
   "websocket.headers.authorization": "Bearer ***",
   "websocket.payload.text": "Hello world",
   "websocket.status": "ok",
+  "websocket.body.0.name": "amir",
+  "websocket.body.0.age": 12,
   "websocket.duration": "20ms"
 }
 ```
