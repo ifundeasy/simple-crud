@@ -171,8 +171,8 @@ func grpcWorker(globalCtx context.Context, notify chan struct{}) {
 				otel.GetTextMapPropagator().Inject(ctx, telemetry.MetadataTextMapCarrier(md))
 				ctx = metadata.NewOutgoingContext(ctx, md)
 
-				fmt.Println(md.Get("traceparent")[0])
-				fmt.Println(span.SpanContext().TraceID().String())
+				// fmt.Println(md.Get("traceparent")[0])
+				// fmt.Println(span.SpanContext().TraceID().String())
 
 				// --- call GetAll RPC with metadata ────────────────────────────
 				var trailer metadata.MD
